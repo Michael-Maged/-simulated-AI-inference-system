@@ -1,0 +1,19 @@
+Distributed systems are collections of independent computers that appear to users as a single coherent system. They are designed to share resources, increase fault tolerance, and improve performance through parallelism.
+
+Load balancing distributes incoming network traffic across multiple servers to ensure no single server becomes overwhelmed. Common algorithms include round-robin, least connections, and weighted response time.
+
+A circuit breaker is a design pattern used to detect failures and prevent cascading failures in distributed systems. It has three states: closed (normal operation), open (failures detected, requests rejected), and half-open (testing if the system has recovered).
+
+Fault tolerance is the ability of a system to continue operating properly in the event of the failure of some of its components. Techniques include replication, checkpointing, and retry mechanisms.
+
+The CAP theorem states that a distributed data store can only provide two of the following three guarantees simultaneously: Consistency, Availability, and Partition tolerance.
+
+gRPC is a high-performance, open-source universal RPC framework developed by Google. It uses Protocol Buffers as its interface definition language and transport protocol, enabling efficient communication between distributed services.
+
+Redis is an open-source, in-memory data structure store used as a database, cache, message broker, and queue. It supports data structures such as strings, hashes, lists, sets, sorted sets, and more.
+
+Prometheus is an open-source systems monitoring and alerting toolkit. It collects metrics from configured targets at given intervals, evaluates rule expressions, and can trigger alerts if certain conditions are observed.
+
+Heartbeat mechanisms in distributed systems involve periodic signals sent between nodes to indicate that the sender is still alive and functioning. If a heartbeat is missed for a configured timeout period, the node is considered dead.
+
+Docker containers provide lightweight, portable, and self-sufficient units that package applications with all their dependencies. Docker Compose orchestrates multiple containers as a single application stack.

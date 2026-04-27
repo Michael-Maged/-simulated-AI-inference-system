@@ -1,0 +1,23 @@
+Large language models (LLMs) are deep learning models trained on vast amounts of text data to understand and generate human-like text. They use the transformer architecture with attention mechanisms.
+
+AI inference refers to the process of using a trained machine learning model to make predictions or generate outputs from new input data. Unlike training, inference does not update model weights.
+
+Retrieval-Augmented Generation (RAG) is a technique that combines information retrieval with text generation. Before generating a response, the system retrieves relevant documents from a knowledge base and includes them as context.
+
+Vector embeddings are numerical representations of text (or other data) as points in high-dimensional space. Similar concepts are represented by vectors that are close together, enabling semantic similarity search.
+
+ChromaDB is an open-source vector database designed for AI applications. It stores embeddings alongside metadata and supports fast similarity searches using approximate nearest neighbor algorithms.
+
+Ollama is a tool for running large language models locally on your own hardware. It provides a simple API for model management and inference, supporting models like Llama, Mistral, and Phi.
+
+The phi3:mini model is a small but capable language model from Microsoft. It is designed to run efficiently on CPU and GPU hardware with limited memory, making it suitable for local inference scenarios.
+
+Sentence transformers are a Python library that provides pretrained models for computing dense vector representations of sentences. The all-MiniLM-L6-v2 model maps sentences to a 384-dimensional dense vector space.
+
+Semantic caching stores the results of LLM inference requests indexed by their semantic meaning rather than exact text. When a new request is semantically similar to a cached one, the cached result is returned without running inference.
+
+Throughput in AI inference systems measures the number of requests processed per unit time. Latency measures the time taken to process a single request. These metrics trade off against each other under high concurrency.
+
+The p95 latency (95th percentile latency) means that 95% of requests complete faster than this value. It is a standard metric in production systems because it captures tail latency better than the mean.
+
+PagedAttention, introduced in the vLLM paper by Kwon et al., manages GPU memory for LLM serving by treating the KV cache as pages in virtual memory, enabling near-zero memory waste and higher throughput.

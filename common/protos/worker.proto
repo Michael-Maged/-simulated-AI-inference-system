@@ -1,0 +1,28 @@
+syntax = "proto3";
+package worker;
+
+service Worker {
+  rpc Infer (InferRequest) returns (InferResponse);
+  rpc Health (HealthRequest) returns (HealthResponse);
+}
+
+message InferRequest {
+  string request_id = 1;
+  string prompt     = 2;
+  int32  max_tokens = 3;
+  string priority   = 4;
+}
+
+message InferResponse {
+  string request_id = 1;
+  string response   = 2;
+  float  latency_ms = 3;
+  bool   rag_used   = 4;
+  string worker_id  = 5;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ready = 1;
+}

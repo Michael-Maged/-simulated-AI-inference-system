@@ -1,0 +1,276 @@
+networks:
+  inference-net:
+    driver: bridge
+
+volumes:
+  chromadb-data:
+  ollama-models:
+  prometheus-data:
+  grafana-data:
+
+services:
+  redis:
+    image: redis:7-alpine
+    networks: [inference-net]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:latest
+    networks: [inference-net]
+    ports: ["8004:8000"]
+    volumes: [chromadb-data:/chroma/chroma]
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\" && echo ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rag-retriever:
+    build:
+      context: .
+      dockerfile: rag/Dockerfile
+    networks: [inference-net]
+    ports: ["8002:8002"]
+    environment:
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: "8000"
+      EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      COLLECTION_NAME: corpus
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: ingestion/Dockerfile
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"]
+    networks: [inference-net]
+    ports: ["8003:8003"]
+    environment:
+      REDIS_URL: redis://redis:6379
+      INGEST_QUEUE: queue:ingest
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ingestion-worker-1:
+    build:
+      context: .
+      dockerfile: ingestion/Dockerfile
+    command: ["python", "worker.py"]
+    networks: [inference-net]
+    environment:
+      REDIS_URL: redis://redis:6379
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: "8000"
+      EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      COLLECTION_NAME: corpus
+      INGEST_QUEUE: queue:ingest
+      CHUNK_SIZE: "512"
+      CHUNK_OVERLAP: "64"
+    depends_on:
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+
+  ingestion-worker-2:
+    build:
+      context: .
+      dockerfile: ingestion/Dockerfile
+    command: ["python", "worker.py"]
+    networks: [inference-net]
+    environment:
+      REDIS_URL: redis://redis:6379
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: "8000"
+      EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      COLLECTION_NAME: corpus
+      INGEST_QUEUE: queue:ingest
+      CHUNK_SIZE: "512"
+      CHUNK_OVERLAP: "64"
+    depends_on:
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+
+  worker-1:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    networks: [inference-net]
+    ports: ["9001:9001"]
+    volumes: [ollama-models:/root/.ollama]
+    environment:
+      WORKER_ID: worker-1
+      GRPC_PORT: "9001"
+      OLLAMA_URL: http://localhost:11434
+      OLLAMA_MODEL: phi3:mini
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+    depends_on:
+      rag-retriever:
+        condition: service_healthy
+    restart: always
+
+  worker-2:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    networks: [inference-net]
+    ports: ["9002:9002"]
+    volumes: [ollama-models:/root/.ollama]
+    environment:
+      WORKER_ID: worker-2
+      GRPC_PORT: "9002"
+      OLLAMA_URL: http://localhost:11434
+      OLLAMA_MODEL: phi3:mini
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+    depends_on:
+      rag-retriever:
+        condition: service_healthy
+    restart: always
+
+  worker-3:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    networks: [inference-net]
+    ports: ["9003:9003"]
+    volumes: [ollama-models:/root/.ollama]
+    environment:
+      WORKER_ID: worker-3
+      GRPC_PORT: "9003"
+      OLLAMA_URL: http://localhost:11434
+      OLLAMA_MODEL: phi3:mini
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+    depends_on:
+      rag-retriever:
+        condition: service_healthy
+    restart: always
+
+  worker-4:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    networks: [inference-net]
+    ports: ["9004:9004"]
+    volumes: [ollama-models:/root/.ollama]
+    environment:
+      WORKER_ID: worker-4
+      GRPC_PORT: "9004"
+      OLLAMA_URL: http://localhost:11434
+      OLLAMA_MODEL: phi3:mini
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+    depends_on:
+      rag-retriever:
+        condition: service_healthy
+    restart: always
+
+  master:
+    build:
+      context: .
+      dockerfile: master/Dockerfile
+    networks: [inference-net]
+    ports: ["8001:8001"]
+    environment:
+      REDIS_URL: redis://redis:6379
+      WORKER_HOSTS: worker-1:9001,worker-2:9002,worker-3:9003,worker-4:9004
+      HEARTBEAT_TIMEOUT_SECONDS: "15"
+      CIRCUIT_BREAKER_THRESHOLD: "5"
+      CIRCUIT_BREAKER_COOLDOWN_SECONDS: "30"
+      MAX_RETRIES: "3"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  load-balancer:
+    build:
+      context: .
+      dockerfile: load_balancer/Dockerfile
+    networks: [inference-net]
+    ports: ["8000:8000"]
+    environment:
+      LB_STRATEGY: load_aware
+      MASTER_URL: http://master:8001
+      REDIS_URL: redis://redis:6379
+      CACHE_SIMILARITY_THRESHOLD: "0.88"
+      CACHE_TTL_SECONDS: "3600"
+      EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
+    depends_on:
+      master:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: ingestion/Dockerfile
+    command: ["python", "bootstrap.py"]
+    networks: [inference-net]
+    environment:
+      INGESTION_URL: http://ingestion-service:8003
+    depends_on:
+      ingestion-service:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    networks: [inference-net]
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+
+  grafana:
+    image: grafana/grafana:latest
+    networks: [inference-net]
+    ports: ["3000:3000"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    depends_on: [prometheus]
