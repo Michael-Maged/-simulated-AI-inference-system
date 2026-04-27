@@ -1,11 +1,26 @@
 groups:
   - name: inference_system
     rules:
-      - alert: ServiceDown
-        expr: up == 0
+      - alert: WorkerDead
+        expr: master_workers_healthy < 1
         for: 30s
         labels:
           severity: critical
         annotations:
-          summary: "Service {{ $labels.job }} is down"
-          description: "{{ $labels.job }} has been unreachable for more than 30 seconds."
+          summary: "No healthy workers available"
+
+      - alert: QueueBacklog
+        expr: master_queue_depth > 500
+        for: 60s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Request queue depth exceeds 500"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(lb_response_latency_seconds_bucket[5m])) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency exceeds 10 seconds"

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(pip install *)",
+      "Bash(python -m grpc_tools.protoc -I common/protos --python_out=common/protos --grpc_python_out=common/protos common/protos/worker.proto)",
+      "Bash(docker compose *)"
+    ]
+  }
+}
