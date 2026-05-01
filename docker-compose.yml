@@ -269,7 +269,7 @@ services:
       - --storage.tsdb.retention.time=7d
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.3
     networks: [inference-net]
     ports: ["3000:3000"]
     volumes:

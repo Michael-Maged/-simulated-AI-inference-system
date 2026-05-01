@@ -7,7 +7,9 @@
       "Bash(python -m grpc_tools.protoc -I common/protos --python_out=common/protos --grpc_python_out=common/protos common/protos/worker.proto)",
       "Bash(docker compose *)",
       "Bash(pytest tests/ -v --tb=short)",
-      "Bash(pytest tests/ --tb=short -q)"
+      "Bash(pytest tests/ --tb=short -q)",
+      "Read(//mnt/c/Users/Michael Maged/Desktop/ASU/term 8/Dist/project/-simulated-AI-inference-system/**)",
+      "Bash(find \"/app\" -name \"client\" -type d)"
     ]
   }
 }
