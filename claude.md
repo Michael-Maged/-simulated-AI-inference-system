@@ -21,7 +21,7 @@ Decisions and code should be justified with reasoning, not just "it works."
 | Concern | Choice | Reason |
 |---|---|---|
 | Language | Python 3.11+ | Required by spec; ecosystem fit |
-| LLM runtime | Ollama with `phi3:mini` or `qwen2.5:3b` | Real local LLM, runs on CPU/GPU |
+| LLM runtime | Grok API (`grok-3-mini` or `grok-2`) | Fast hosted inference, no local GPU required |
 | Vector DB | ChromaDB (Docker container) | Easy setup, runs as separate service |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | Small, fast, industry standard |
 | Internal RPC | gRPC | Production-grade, demonstrates wider reading |
@@ -31,7 +31,7 @@ Decisions and code should be justified with reasoning, not just "it works."
 | Load testing | Locust | Real tool, handles 1000+ users, has UI |
 | Orchestration | Docker Compose | One-command stack bring-up |
 
-**Do NOT use:** Supabase, Pinecone, OpenAI API, Kubernetes (mention in report only), Kafka, TensorFlow, hosted services in general. The project must be self-contained and demonstrably built by us.
+**Do NOT use:** Supabase, Pinecone, OpenAI API, Kubernetes (mention in report only), Kafka, TensorFlow.
 
 ## Architecture
 
@@ -45,7 +45,7 @@ Load Balancer  ──► [Round Robin | Least Connections | Load-Aware]
 Master / Coordinator  ──► tracks workers, retries, request queue
         │
         ▼
-GPU Worker 1..N  ──► Ollama inference + RAG context
+GPU Worker 1..N  ──► Grok API inference + RAG context
         │
         ▼
 RAG Service  ──► ChromaDB (vector store)
@@ -58,7 +58,7 @@ Ingestion Service  ──► Ingestion Workers ──► chunking + embedding
 
 - `load-balancer` (FastAPI, public port 8000)
 - `master` (FastAPI + gRPC)
-- `worker-1` … `worker-4` (gRPC, each with Ollama)
+- `worker-1` … `worker-4` (gRPC, each calling Grok API)
 - `rag-retriever` (FastAPI, queries ChromaDB)
 - `ingestion-service` (FastAPI, accepts documents)
 - `ingestion-worker-1`, `ingestion-worker-2` (consume Redis queue, embed, write to Chroma)
@@ -137,7 +137,7 @@ Generate matplotlib graphs for all of the above.
 | Phase | Focus | Duration |
 |---|---|---|
 | 1 | Architecture, Docker Compose skeleton, all services say "hello" | Week 1 |
-| 2 | Load balancer (3 strategies), worker + Ollama, end-to-end single request | Week 2 |
+| 2 | Load balancer (3 strategies), worker + Grok API, end-to-end single request | Week 2 |
 | 3 | RAG retriever, ChromaDB integration, ingestion pipeline | Week 3 |
 | 4 | Fault tolerance, heartbeats, retries, monitoring stack | Week 4 |
 | 5 | Load testing, chaos testing, all metrics gathered | Week 5 |
@@ -149,7 +149,7 @@ Adjust to your group's actual size. Suggested split:
 
 - **Person A:** Load balancer + monitoring (Prometheus/Grafana)
 - **Person B:** Master/coordinator + Redis queue + fault tolerance
-- **Person C:** Workers + Ollama integration + (optional) batching
+- **Person C:** Workers + Grok API integration + (optional) batching
 - **Person D:** RAG retriever + ingestion service + corpus prep
 - **Person E:** Client/load testing + DevOps glue + report coordination
 

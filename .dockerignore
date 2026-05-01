@@ -1,0 +1,13 @@
+.git
+.gitignore
+graphify-out/
+docs/
+client/
+*.md
+*.pyc
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example

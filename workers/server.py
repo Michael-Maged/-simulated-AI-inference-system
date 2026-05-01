@@ -24,7 +24,7 @@ MASTER_URL = os.getenv("MASTER_URL", "http://localhost:8001")
 INFER_REQUESTS = Counter("worker_infer_requests_total", "Total inference requests", ["worker_id"])
 INFER_LATENCY = Histogram("worker_infer_latency_seconds", "Inference latency", ["worker_id"],
                           buckets=[0.1, 0.5, 1, 2, 5, 10, 30])
-OLLAMA_ERRORS = Counter("worker_ollama_errors_total", "Ollama errors", ["worker_id"])
+INFER_ERRORS = Counter("worker_infer_errors_total", "Inference errors", ["worker_id"])
 
 _in_flight = 0
 
@@ -50,7 +50,7 @@ class WorkerServicer(worker_pb2_grpc.WorkerServicer):
                 worker_id=WORKER_ID,
             )
         except Exception as e:
-            OLLAMA_ERRORS.labels(worker_id=WORKER_ID).inc()
+            INFER_ERRORS.labels(worker_id=WORKER_ID).inc()
             log.error(f"{WORKER_ID} inference error: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))

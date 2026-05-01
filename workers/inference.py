@@ -2,8 +2,9 @@ import os
 import time
 import httpx
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi3:mini")
+GROK_API_KEY = os.getenv("XAI_API_KEY", "")
+GROK_MODEL = os.getenv("GROK_MODEL", "grok-3-mini")
+GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 RAG_URL = os.getenv("RAG_URL", "http://localhost:8002")
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 
@@ -25,19 +26,19 @@ async def retrieve_context(prompt: str) -> str:
 async def run_inference(prompt: str, max_tokens: int) -> tuple[str, float]:
     start = time.time()
     context = await retrieve_context(prompt)
-    full_prompt = f"[CONTEXT]\n{context}\n\n[QUESTION]\n{prompt}" if context else prompt
+    user_content = f"[CONTEXT]\n{context}\n\n[QUESTION]\n{prompt}" if context else prompt
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
-            f"{OLLAMA_URL}/api/generate",
+            GROK_API_URL,
+            headers={"Authorization": f"Bearer {GROK_API_KEY}"},
             json={
-                "model": OLLAMA_MODEL,
-                "prompt": full_prompt,
-                "stream": False,
-                "options": {"num_predict": max_tokens},
+                "model": GROK_MODEL,
+                "messages": [{"role": "user", "content": user_content}],
+                "max_tokens": max_tokens,
             },
         )
         resp.raise_for_status()
-        response_text = resp.json()["response"]
+        response_text = resp.json()["choices"][0]["message"]["content"]
 
     return response_text, (time.time() - start) * 1000

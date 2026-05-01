@@ -4,11 +4,17 @@ networks:
 
 volumes:
   chromadb-data:
-  ollama-models:
   prometheus-data:
   grafana-data:
 
 services:
+  inference-base:
+    build:
+      context: .
+      dockerfile: base.Dockerfile
+    image: inference-base:latest
+    profiles: ["build-base"]
+
   redis:
     image: redis:7-alpine
     networks: [inference-net]
@@ -119,12 +125,11 @@ services:
       dockerfile: workers/Dockerfile
     networks: [inference-net]
     ports: ["9001:9001"]
-    volumes: [ollama-models:/root/.ollama]
     environment:
       WORKER_ID: worker-1
       GRPC_PORT: "9001"
-      OLLAMA_URL: http://localhost:11434
-      OLLAMA_MODEL: phi3:mini
+      XAI_API_KEY: ${XAI_API_KEY}
+      GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
       RAG_TOP_K: "3"
@@ -139,12 +144,11 @@ services:
       dockerfile: workers/Dockerfile
     networks: [inference-net]
     ports: ["9002:9002"]
-    volumes: [ollama-models:/root/.ollama]
     environment:
       WORKER_ID: worker-2
       GRPC_PORT: "9002"
-      OLLAMA_URL: http://localhost:11434
-      OLLAMA_MODEL: phi3:mini
+      XAI_API_KEY: ${XAI_API_KEY}
+      GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
       RAG_TOP_K: "3"
@@ -159,12 +163,11 @@ services:
       dockerfile: workers/Dockerfile
     networks: [inference-net]
     ports: ["9003:9003"]
-    volumes: [ollama-models:/root/.ollama]
     environment:
       WORKER_ID: worker-3
       GRPC_PORT: "9003"
-      OLLAMA_URL: http://localhost:11434
-      OLLAMA_MODEL: phi3:mini
+      XAI_API_KEY: ${XAI_API_KEY}
+      GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
       RAG_TOP_K: "3"
@@ -179,12 +182,11 @@ services:
       dockerfile: workers/Dockerfile
     networks: [inference-net]
     ports: ["9004:9004"]
-    volumes: [ollama-models:/root/.ollama]
     environment:
       WORKER_ID: worker-4
       GRPC_PORT: "9004"
-      OLLAMA_URL: http://localhost:11434
-      OLLAMA_MODEL: phi3:mini
+      XAI_API_KEY: ${XAI_API_KEY}
+      GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
       RAG_TOP_K: "3"

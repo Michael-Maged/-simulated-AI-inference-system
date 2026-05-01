@@ -1,5 +1,5 @@
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
 redis[hiredis]==5.0.4
 grpcio==1.63.0
 grpcio-tools==1.63.0
