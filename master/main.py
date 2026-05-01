@@ -9,9 +9,9 @@ from prometheus_client import make_asgi_app, Gauge, Counter
 
 sys.path.insert(0, "/app")
 from common.models import HeartbeatRequest, DispatchRequest, WorkerStatus
-from master.worker_registry import WorkerRegistry
-from master.circuit_breaker import CircuitBreaker
-from master.queue_processor import process_request
+from worker_registry import WorkerRegistry
+from circuit_breaker import CircuitBreaker
+from queue_processor import process_request
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

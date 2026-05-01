@@ -11,8 +11,8 @@ from prometheus_client import make_asgi_app, Counter, Histogram
 import sys
 sys.path.insert(0, "/app")
 from common.models import InferRequest, InferResponse
-from load_balancer.strategies import RoundRobinStrategy, LeastConnectionsStrategy, LoadAwareStrategy
-from load_balancer.cache import SemanticCache
+from strategies import RoundRobinStrategy, LeastConnectionsStrategy, LoadAwareStrategy
+from cache import SemanticCache
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

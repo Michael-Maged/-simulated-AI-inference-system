@@ -33,10 +33,11 @@ services:
     environment:
       ANONYMIZED_TELEMETRY: "false"
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\" && echo ok"]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8000 && echo -e \"GET /api/v2/heartbeat HTTP/1.0\\r\\n\\r\\n\" >&3 && cat <&3 | grep -q 200'"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
   rag-retriever:
     build:
@@ -57,6 +58,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 120s
 
   ingestion-service:
     build:
@@ -240,6 +242,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 120s
 
   bootstrap:
     build:

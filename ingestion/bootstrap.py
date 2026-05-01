@@ -4,7 +4,7 @@ import pathlib
 import httpx
 
 INGESTION_URL = os.getenv("INGESTION_URL", "http://localhost:8003")
-CORPUS_DIR = pathlib.Path(__file__).parent.parent / "corpus"
+CORPUS_DIR = pathlib.Path("/app/corpus")
 
 
 def wait_for_service():

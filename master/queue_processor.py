@@ -5,8 +5,9 @@ import sys
 import grpc
 
 sys.path.insert(0, "/app")
+sys.path.insert(0, "/app/common/protos")
 from common.protos import worker_pb2, worker_pb2_grpc
-from master.circuit_breaker import CircuitBreaker
+from circuit_breaker import CircuitBreaker
 
 log = logging.getLogger(__name__)
 

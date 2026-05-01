@@ -11,8 +11,9 @@ from concurrent import futures
 from prometheus_client import start_http_server, Counter, Histogram
 
 sys.path.insert(0, "/app")
+sys.path.insert(0, "/app/common/protos")
 from common.protos import worker_pb2, worker_pb2_grpc
-from workers.inference import run_inference
+from inference import run_inference
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

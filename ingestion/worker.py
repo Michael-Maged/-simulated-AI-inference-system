@@ -5,7 +5,7 @@ import uuid
 import redis
 import chromadb
 from sentence_transformers import SentenceTransformer
-from ingestion.chunker import chunk_text
+from chunker import chunk_text
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
