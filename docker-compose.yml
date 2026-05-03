@@ -130,7 +130,7 @@ services:
     environment:
       WORKER_ID: worker-1
       GRPC_PORT: "9001"
-      XAI_API_KEY: ${XAI_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
       GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
@@ -149,7 +149,7 @@ services:
     environment:
       WORKER_ID: worker-2
       GRPC_PORT: "9002"
-      XAI_API_KEY: ${XAI_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
       GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
@@ -168,7 +168,7 @@ services:
     environment:
       WORKER_ID: worker-3
       GRPC_PORT: "9003"
-      XAI_API_KEY: ${XAI_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
       GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
@@ -187,7 +187,7 @@ services:
     environment:
       WORKER_ID: worker-4
       GRPC_PORT: "9004"
-      XAI_API_KEY: ${XAI_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
       GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001

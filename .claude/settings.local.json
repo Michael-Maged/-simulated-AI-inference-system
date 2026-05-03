@@ -9,7 +9,9 @@
       "Bash(pytest tests/ -v --tb=short)",
       "Bash(pytest tests/ --tb=short -q)",
       "Read(//mnt/c/Users/Michael Maged/Desktop/ASU/term 8/Dist/project/-simulated-AI-inference-system/**)",
-      "Bash(find \"/app\" -name \"client\" -type d)"
+      "Bash(find \"/app\" -name \"client\" -type d)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Michael Maged\\\\Desktop\\\\ASU\\\\term 8\\\\Dist\\\\project\\\\-simulated-AI-inference-system\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }

@@ -56,6 +56,11 @@ async def _heartbeat_monitor():
         await _registry.check_health()
         healthy = _registry.get_healthy_workers()
         WORKERS_HEALTHY.set(len(healthy))
+        total_connections = 0
+        for w in _registry.all_workers():
+            val = await _redis.get(f"connections:{w.worker_id}")
+            total_connections += int(val or 0)
+        QUEUE_DEPTH.set(total_connections)
 
 
 @app.get("/health")

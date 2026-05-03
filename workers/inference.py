@@ -2,9 +2,9 @@ import os
 import time
 import httpx
 
-GROK_API_KEY = os.getenv("XAI_API_KEY", "")
-GROK_MODEL = os.getenv("GROK_MODEL", "grok-3-mini")
-GROK_API_URL = "https://api.x.ai/v1/chat/completions"
+GROK_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROK_MODEL = os.getenv("GROK_MODEL", "llama-3.1-8b-instant")
+GROK_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 RAG_URL = os.getenv("RAG_URL", "http://localhost:8002")
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 

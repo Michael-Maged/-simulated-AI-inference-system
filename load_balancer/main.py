@@ -108,6 +108,14 @@ async def infer(body: InferRequest):
     )
 
 
+@app.delete("/admin/cache")
+async def clear_cache():
+    keys = await _redis.keys("cache:embed:*")
+    if keys:
+        await _redis.delete(*keys)
+    return {"deleted": len(keys)}
+
+
 @app.get("/admin/strategy")
 async def get_strategy():
     return {"strategy": LB_STRATEGY}
