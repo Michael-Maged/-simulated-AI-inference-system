@@ -49,7 +49,7 @@ def recover_worker(name: str):
 def status():
     import httpx
     try:
-        resp = httpx.get("http://localhost:8001/workers", timeout=5.0)
+        resp = httpx.get("http://localhost:8001/workers", timeout=15.0)
         workers = resp.json()
         print(f"{'Worker':<15} {'Alive':<8} {'Circuit':<12} {'Queue':<8} {'p95 ms'}")
         print("-" * 55)
