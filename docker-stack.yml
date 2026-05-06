@@ -11,7 +11,8 @@ volumes:
 
 services:
 
-  # ── Ollama: shared AI backend, uses GPU when available ──────────────────────
+  # ── Ollama: one instance per GPU node (mode: global) ─────────────────────────
+  # Label GPU nodes first:  docker node update --label-add gpu=true <node-id>
   ollama:
     image: ollama/ollama:latest
     networks: [inference-net]
@@ -20,19 +21,22 @@ services:
       - ollama-models:/root/.ollama
     environment:
       OLLAMA_HOST: 0.0.0.0
-      OLLAMA_NUM_PARALLEL: "4"        # concurrent inference slots
+      OLLAMA_NUM_PARALLEL: "4"
       OLLAMA_MAX_LOADED_MODELS: "1"
       OLLAMA_KEEP_ALIVE: "24h"
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     deploy:
-      replicas: 1
+      mode: global                          # one Ollama replica per GPU node
+      placement:
+        constraints:
+          - node.labels.gpu == true         # only on nodes labelled gpu=true
       restart_policy:
         condition: on-failure
       resources:
         limits:
-          cpus: "4"
-          memory: 8G
+          cpus: "8"
+          memory: 16G
 
   # ── Redis ────────────────────────────────────────────────────────────────────
   redis:
@@ -64,7 +68,7 @@ services:
 
   # ── RAG Retriever ─────────────────────────────────────────────────────────────
   rag-retriever:
-    image: localhost/rag-retriever:latest
+    image: ${REGISTRY:-localhost}/rag-retriever:latest
     networks: [inference-net]
     ports: ["8002:8002"]
     environment:
@@ -79,7 +83,7 @@ services:
 
   # ── Ingestion ─────────────────────────────────────────────────────────────────
   ingestion-service:
-    image: localhost/ingestion:latest
+    image: ${REGISTRY:-localhost}/ingestion:latest
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"]
     networks: [inference-net]
     ports: ["8003:8003"]
@@ -92,7 +96,7 @@ services:
         condition: on-failure
 
   ingestion-worker:
-    image: localhost/ingestion:latest
+    image: ${REGISTRY:-localhost}/ingestion:latest
     command: ["python", "worker.py"]
     networks: [inference-net]
     environment:
@@ -105,12 +109,12 @@ services:
       CHUNK_SIZE: "512"
       CHUNK_OVERLAP: "64"
     deploy:
-      replicas: 1
+      replicas: 2
       restart_policy:
         condition: on-failure
 
   bootstrap:
-    image: localhost/ingestion:latest
+    image: ${REGISTRY:-localhost}/ingestion:latest
     command: ["python", "bootstrap.py"]
     networks: [inference-net]
     environment:
@@ -122,7 +126,7 @@ services:
 
   # ── Master Coordinator ────────────────────────────────────────────────────────
   master:
-    image: localhost/master:latest
+    image: ${REGISTRY:-localhost}/master:latest
     networks: [inference-net]
     ports: ["8001:8001"]
     environment:
@@ -142,11 +146,11 @@ services:
           cpus: "2"
           memory: 1G
 
-  # ── Workers: scale these across nodes ────────────────────────────────────────
-  # Each replica connects to the shared Ollama service.
+  # ── Workers: distributed across all nodes ─────────────────────────────────────
+  # Workers call http://ollama:11434 — Swarm DNS load-balances across all GPU Olamas.
   # Scale with: docker service scale inference_worker=16
   worker:
-    image: localhost/worker:latest
+    image: ${REGISTRY:-localhost}/worker:latest
     networks: [inference-net]
     environment:
       GRPC_PORT: "9001"
@@ -165,14 +169,17 @@ services:
       update_config:
         parallelism: 2
         delay: 5s
+      placement:
+        preferences:
+          - spread: node.labels.gpu         # prefer GPU nodes but not required
       resources:
         limits:
           cpus: "1"
-          memory: 256M
+          memory: 512M
 
   # ── Load Balancer ─────────────────────────────────────────────────────────────
   load-balancer:
-    image: localhost/load-balancer:latest
+    image: ${REGISTRY:-localhost}/load-balancer:latest
     networks: [inference-net]
     ports: ["8000:8000"]
     environment:
@@ -200,6 +207,7 @@ services:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # Swarm service discovery
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=7d
