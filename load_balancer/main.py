@@ -44,7 +44,10 @@ _strategy = None
 async def startup():
     global _redis, _cache, _strategy
     _redis = aioredis.from_url(REDIS_URL)
-    _cache = SemanticCache(REDIS_URL, CACHE_THRESHOLD, CACHE_TTL, EMBED_MODEL)
+    if CACHE_ENABLED:
+        _cache = SemanticCache(REDIS_URL, CACHE_THRESHOLD, CACHE_TTL, EMBED_MODEL)
+    else:
+        _cache = None
     if LB_STRATEGY == "round_robin":
         _strategy = RoundRobinStrategy()
     elif LB_STRATEGY == "least_connections":
@@ -113,6 +116,8 @@ async def infer(body: InferRequest):
 
 @app.delete("/admin/cache")
 async def clear_cache():
+    if _redis is None:
+        raise HTTPException(status_code=503, detail="Redis is not initialized")
     keys = await _redis.keys("cache:embed:*")
     if keys:
         await _redis.delete(*keys)
