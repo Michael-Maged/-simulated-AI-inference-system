@@ -1,0 +1,224 @@
+networks:
+  inference-net:
+    driver: overlay
+    attachable: true
+
+volumes:
+  chromadb-data:
+  prometheus-data:
+  grafana-data:
+  ollama-models:
+
+services:
+
+  # ── Ollama: shared AI backend, uses GPU when available ──────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    networks: [inference-net]
+    ports: ["11434:11434"]
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_NUM_PARALLEL: "4"        # concurrent inference slots
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "24h"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    networks: [inference-net]
+    ports: ["6379:6379"]
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+
+  # ── ChromaDB ─────────────────────────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    networks: [inference-net]
+    ports: ["8004:8000"]
+    volumes: [chromadb-data:/chroma/chroma]
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+
+  # ── RAG Retriever ─────────────────────────────────────────────────────────────
+  rag-retriever:
+    image: localhost/rag-retriever:latest
+    networks: [inference-net]
+    ports: ["8002:8002"]
+    environment:
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: "8000"
+      EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      COLLECTION_NAME: corpus
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # ── Ingestion ─────────────────────────────────────────────────────────────────
+  ingestion-service:
+    image: localhost/ingestion:latest
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"]
+    networks: [inference-net]
+    ports: ["8003:8003"]
+    environment:
+      REDIS_URL: redis://redis:6379
+      INGEST_QUEUE: queue:ingest
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  ingestion-worker:
+    image: localhost/ingestion:latest
+    command: ["python", "worker.py"]
+    networks: [inference-net]
+    environment:
+      REDIS_URL: redis://redis:6379
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: "8000"
+      EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      COLLECTION_NAME: corpus
+      INGEST_QUEUE: queue:ingest
+      CHUNK_SIZE: "512"
+      CHUNK_OVERLAP: "64"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  bootstrap:
+    image: localhost/ingestion:latest
+    command: ["python", "bootstrap.py"]
+    networks: [inference-net]
+    environment:
+      INGESTION_URL: http://ingestion-service:8003
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: none
+
+  # ── Master Coordinator ────────────────────────────────────────────────────────
+  master:
+    image: localhost/master:latest
+    networks: [inference-net]
+    ports: ["8001:8001"]
+    environment:
+      REDIS_URL: redis://redis:6379
+      HEARTBEAT_TIMEOUT_SECONDS: "15"
+      CIRCUIT_BREAKER_THRESHOLD: "5"
+      CIRCUIT_BREAKER_COOLDOWN_SECONDS: "30"
+      MAX_RETRIES: "3"
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+
+  # ── Workers: scale these across nodes ────────────────────────────────────────
+  # Each replica connects to the shared Ollama service.
+  # Scale with: docker service scale inference_worker=16
+  worker:
+    image: localhost/worker:latest
+    networks: [inference-net]
+    environment:
+      GRPC_PORT: "9001"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+      WORKER_ID: "worker-{{.Task.Slot}}"
+    deploy:
+      replicas: ${WORKER_REPLICAS:-4}
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+      update_config:
+        parallelism: 2
+        delay: 5s
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+
+  # ── Load Balancer ─────────────────────────────────────────────────────────────
+  load-balancer:
+    image: localhost/load-balancer:latest
+    networks: [inference-net]
+    ports: ["8000:8000"]
+    environment:
+      LB_STRATEGY: load_aware
+      MASTER_URL: http://master:8001
+      REDIS_URL: redis://redis:6379
+      CACHE_SIMILARITY_THRESHOLD: "0.88"
+      CACHE_TTL_SECONDS: "3600"
+      EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+
+  # ── Monitoring ────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    networks: [inference-net]
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+
+  grafana:
+    image: grafana/grafana:10.4.3
+    networks: [inference-net]
+    ports: ["3000:3000"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]

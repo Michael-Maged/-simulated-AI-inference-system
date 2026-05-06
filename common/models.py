@@ -19,6 +19,8 @@ class HeartbeatRequest(BaseModel):
     worker_id: str
     queue_depth: int = 0
     last_latency_ms: float = 0.0
+    host: str = ""
+    port: int = 9001
 
 
 class DispatchRequest(BaseModel):
@@ -26,6 +28,12 @@ class DispatchRequest(BaseModel):
     prompt: str
     max_tokens: int = 512
     priority: str = "normal"
+
+
+class RegisterRequest(BaseModel):
+    worker_id: str
+    host: str
+    port: int
 
 
 class WorkerStatus(BaseModel):

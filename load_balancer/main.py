@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 MASTER_URL = os.getenv("MASTER_URL", "http://localhost:8001")
 LB_STRATEGY = os.getenv("LB_STRATEGY", "round_robin")
+CACHE_ENABLED = os.getenv("CACHE_ENABLED", "false").lower() == "true"
 CACHE_THRESHOLD = float(os.getenv("CACHE_SIMILARITY_THRESHOLD", "0.88"))
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
@@ -63,17 +64,18 @@ async def infer(body: InferRequest):
     start = time.time()
     request_id = str(uuid.uuid4())
 
-    cached_response = await _cache.get(body.prompt)
-    if cached_response:
-        CACHE_HITS.inc()
-        REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="true").inc()
-        LATENCY.observe(time.time() - start)
-        return InferResponse(
-            request_id=request_id,
-            response=cached_response,
-            latency_ms=(time.time() - start) * 1000,
-            cached=True,
-        )
+    if CACHE_ENABLED:
+        cached_response = await _cache.get(body.prompt)
+        if cached_response:
+            CACHE_HITS.inc()
+            REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="true").inc()
+            LATENCY.observe(time.time() - start)
+            return InferResponse(
+                request_id=request_id,
+                response=cached_response,
+                latency_ms=(time.time() - start) * 1000,
+                cached=True,
+            )
 
     CACHE_MISSES.inc()
 
@@ -97,7 +99,8 @@ async def infer(body: InferRequest):
     LATENCY.observe(latency / 1000)
     REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="false").inc()
 
-    await _cache.set(body.prompt, data["response"])
+    if CACHE_ENABLED:
+        await _cache.set(body.prompt, data["response"])
 
     return InferResponse(
         request_id=request_id,

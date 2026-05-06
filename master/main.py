@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from prometheus_client import make_asgi_app, Gauge, Counter
 
 sys.path.insert(0, "/app")
-from common.models import HeartbeatRequest, DispatchRequest, WorkerStatus
+from common.models import HeartbeatRequest, DispatchRequest, WorkerStatus, RegisterRequest
 from worker_registry import WorkerRegistry
 from circuit_breaker import CircuitBreaker
 from queue_processor import process_request
@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-WORKER_HOSTS = os.getenv("WORKER_HOSTS", "worker-1:9001")
+WORKER_HOSTS = os.getenv("WORKER_HOSTS", "")
 HEARTBEAT_TIMEOUT = int(os.getenv("HEARTBEAT_TIMEOUT_SECONDS", "15"))
 CB_THRESHOLD = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "5"))
 CB_COOLDOWN = int(os.getenv("CIRCUIT_BREAKER_COOLDOWN_SECONDS", "30"))
@@ -41,13 +41,16 @@ async def startup():
     global _redis, _registry, _circuit_breakers
     _redis = aioredis.from_url(REDIS_URL)
     _registry = WorkerRegistry(_redis, timeout=HEARTBEAT_TIMEOUT)
-    for entry in WORKER_HOSTS.split(","):
-        host, port = entry.strip().split(":")
-        worker_id = host
-        _registry.register_worker(worker_id, host, int(port))
-        _circuit_breakers[worker_id] = CircuitBreaker(worker_id, _redis, CB_THRESHOLD, CB_COOLDOWN)
+
+    # Pre-register static workers from env (optional, workers also self-register)
+    if WORKER_HOSTS:
+        for entry in WORKER_HOSTS.split(","):
+            host, port = entry.strip().split(":")
+            _registry.register_worker(host, host, int(port))
+            _circuit_breakers[host] = CircuitBreaker(host, _redis, CB_THRESHOLD, CB_COOLDOWN)
+
     asyncio.create_task(_heartbeat_monitor())
-    log.info(f"Master started with workers: {WORKER_HOSTS}")
+    log.info("Master started — waiting for workers to register")
 
 
 async def _heartbeat_monitor():
@@ -68,9 +71,25 @@ async def health():
     return {"status": "ok", "service": "master"}
 
 
+@app.post("/register")
+async def register(body: RegisterRequest):
+    """Workers call this on startup to register themselves dynamically."""
+    _registry.register_worker(body.worker_id, body.host, body.port)
+    if body.worker_id not in _circuit_breakers:
+        _circuit_breakers[body.worker_id] = CircuitBreaker(
+            body.worker_id, _redis, CB_THRESHOLD, CB_COOLDOWN
+        )
+    log.info(f"Worker registered: {body.worker_id} at {body.host}:{body.port}")
+    return {"status": "registered"}
+
+
 @app.post("/heartbeat")
 async def heartbeat(body: HeartbeatRequest):
-    await _registry.heartbeat(body.worker_id, body.queue_depth, body.last_latency_ms)
+    await _registry.heartbeat(body.worker_id, body.queue_depth, body.last_latency_ms, body.host, body.port)
+    if body.worker_id not in _circuit_breakers:
+        _circuit_breakers[body.worker_id] = CircuitBreaker(
+            body.worker_id, _redis, CB_THRESHOLD, CB_COOLDOWN
+        )
     return {"status": "ok"}
 
 

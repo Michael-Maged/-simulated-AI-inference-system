@@ -6,15 +6,9 @@ volumes:
   chromadb-data:
   prometheus-data:
   grafana-data:
+  ollama-models:
 
 services:
-  inference-base:
-    build:
-      context: .
-      dockerfile: base.Dockerfile
-    image: inference-base:latest
-    profiles: ["build-base"]
-
   redis:
     image: redis:7-alpine
     networks: [inference-net]
@@ -55,10 +49,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8002/health"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 120s
+      retries: 10
+      start_period: 180s
 
   ingestion-service:
     build:
@@ -100,103 +94,6 @@ services:
       chromadb:
         condition: service_healthy
 
-  ingestion-worker-2:
-    build:
-      context: .
-      dockerfile: ingestion/Dockerfile
-    command: ["python", "worker.py"]
-    networks: [inference-net]
-    environment:
-      REDIS_URL: redis://redis:6379
-      CHROMADB_HOST: chromadb
-      CHROMADB_PORT: "8000"
-      EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
-      COLLECTION_NAME: corpus
-      INGEST_QUEUE: queue:ingest
-      CHUNK_SIZE: "512"
-      CHUNK_OVERLAP: "64"
-    depends_on:
-      redis:
-        condition: service_healthy
-      chromadb:
-        condition: service_healthy
-
-  worker-1:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile
-    networks: [inference-net]
-    ports: ["9001:9001"]
-    environment:
-      WORKER_ID: worker-1
-      GRPC_PORT: "9001"
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
-      RAG_URL: http://rag-retriever:8002
-      MASTER_URL: http://master:8001
-      RAG_TOP_K: "3"
-    depends_on:
-      rag-retriever:
-        condition: service_healthy
-    restart: always
-
-  worker-2:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile
-    networks: [inference-net]
-    ports: ["9002:9002"]
-    environment:
-      WORKER_ID: worker-2
-      GRPC_PORT: "9002"
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
-      RAG_URL: http://rag-retriever:8002
-      MASTER_URL: http://master:8001
-      RAG_TOP_K: "3"
-    depends_on:
-      rag-retriever:
-        condition: service_healthy
-    restart: always
-
-  worker-3:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile
-    networks: [inference-net]
-    ports: ["9003:9003"]
-    environment:
-      WORKER_ID: worker-3
-      GRPC_PORT: "9003"
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
-      RAG_URL: http://rag-retriever:8002
-      MASTER_URL: http://master:8001
-      RAG_TOP_K: "3"
-    depends_on:
-      rag-retriever:
-        condition: service_healthy
-    restart: always
-
-  worker-4:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile
-    networks: [inference-net]
-    ports: ["9004:9004"]
-    environment:
-      WORKER_ID: worker-4
-      GRPC_PORT: "9004"
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      GROK_MODEL: ${GROK_MODEL:-grok-3-mini}
-      RAG_URL: http://rag-retriever:8002
-      MASTER_URL: http://master:8001
-      RAG_TOP_K: "3"
-    depends_on:
-      rag-retriever:
-        condition: service_healthy
-    restart: always
-
   master:
     build:
       context: .
@@ -205,7 +102,6 @@ services:
     ports: ["8001:8001"]
     environment:
       REDIS_URL: redis://redis:6379
-      WORKER_HOSTS: worker-1:9001,worker-2:9002,worker-3:9003,worker-4:9004
       HEARTBEAT_TIMEOUT_SECONDS: "15"
       CIRCUIT_BREAKER_THRESHOLD: "5"
       CIRCUIT_BREAKER_COOLDOWN_SECONDS: "30"
@@ -218,6 +114,106 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  worker-1:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    networks: [inference-net]
+    ports: ["9001:9001"]
+    environment:
+      WORKER_ID: worker-1
+      WORKER_HOST: worker-1
+      GRPC_PORT: "9001"
+      OLLAMA_URL: http://localhost:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    volumes:
+      - ollama-models:/root/.ollama
+    depends_on:
+      master:
+        condition: service_healthy
+      rag-retriever:
+        condition: service_healthy
+    restart: always
+
+  worker-2:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    networks: [inference-net]
+    ports: ["9002:9002"]
+    environment:
+      WORKER_ID: worker-2
+      WORKER_HOST: worker-2
+      GRPC_PORT: "9002"
+      OLLAMA_URL: http://localhost:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    volumes:
+      - ollama-models:/root/.ollama
+    depends_on:
+      master:
+        condition: service_healthy
+      rag-retriever:
+        condition: service_healthy
+    restart: always
+
+  worker-3:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    networks: [inference-net]
+    ports: ["9003:9003"]
+    environment:
+      WORKER_ID: worker-3
+      WORKER_HOST: worker-3
+      GRPC_PORT: "9003"
+      OLLAMA_URL: http://localhost:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    volumes:
+      - ollama-models:/root/.ollama
+    depends_on:
+      master:
+        condition: service_healthy
+      rag-retriever:
+        condition: service_healthy
+    restart: always
+
+  worker-4:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    networks: [inference-net]
+    ports: ["9004:9004"]
+    environment:
+      WORKER_ID: worker-4
+      WORKER_HOST: worker-4
+      GRPC_PORT: "9004"
+      OLLAMA_URL: http://localhost:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://rag-retriever:8002
+      MASTER_URL: http://master:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    volumes:
+      - ollama-models:/root/.ollama
+    depends_on:
+      master:
+        condition: service_healthy
+      rag-retriever:
+        condition: service_healthy
+    restart: always
 
   load-balancer:
     build:

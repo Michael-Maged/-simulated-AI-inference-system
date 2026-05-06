@@ -7,22 +7,35 @@ Quick copy-paste commands for everything in the system. Run all commands from th
 ## Stack
 
 ```powershell
-# First time (builds images, takes 5-15 min)
-docker compose up --build
+# First time setup — init swarm and deploy
+docker swarm init
+docker stack deploy -c docker-stack.yml inference
 
-# Every time after (fast)
-docker compose up
+# Every time after (swarm already initialized)
+docker stack deploy -c docker-stack.yml inference
 
-# Stop everything (keeps data)
-docker compose down
+# Stop everything
+docker stack rm inference
 
-# Stop and wipe all volumes (fresh start)
-docker compose down -v
+# Fresh start (stop + leave swarm)
+docker stack rm inference
+docker swarm leave --force
 
-# Rebuild and restart one service only
-docker compose up -d --build load-balancer
-docker compose up -d --build master
-docker compose up -d --build worker-1
+# Check all services and replica counts
+docker service ls
+
+# Check which node each task is running on
+docker stack ps inference
+
+# Rebuild one image and update its service
+docker build -t localhost/master:latest -f master/Dockerfile .
+docker service update --image localhost/master:latest inference_master
+
+docker build -t localhost/load-balancer:latest -f load_balancer/Dockerfile .
+docker service update --image localhost/load-balancer:latest inference_load-balancer
+
+docker build -t localhost/worker:latest -f workers/Dockerfile .
+docker service update --image localhost/worker:latest inference_worker
 ```
 
 ---
@@ -46,14 +59,14 @@ Invoke-RestMethod -Uri "http://localhost:8000/infer" -Method POST `
 ## Cache
 
 ```powershell
-# Clear all cached responses (via API — load balancer must be healthy)
+# Clear all cached responses (via API)
 Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
 
-# Clear cache directly via Redis (works even if load balancer is still starting)
-docker compose exec redis redis-cli EVAL "local k=redis.call('keys','cache:embed:*') if #k>0 then return redis.call('del',unpack(k)) else return 0 end" 0
+# Clear cache directly via Redis
+docker run --rm --network inference_inference-net redis:7-alpine redis-cli -h redis EVAL "local k=redis.call('keys','cache:embed:*') if #k>0 then return redis.call('del',unpack(k)) else return 0 end" 0
 
 # Count how many cache entries exist
-docker compose exec redis redis-cli KEYS "cache:embed:*"
+docker run --rm --network inference_inference-net redis:7-alpine redis-cli -h redis KEYS "cache:embed:*"
 ```
 
 > Clear the cache before running load tests so requests actually reach workers and produce metrics.
@@ -147,24 +160,23 @@ Run while a Locust test is active in another terminal.
 
 ```powershell
 # Check all worker statuses (alive, circuit state, queue depth, latency)
-python client/chaos.py --status
+Invoke-RestMethod -Uri "http://localhost:8001/workers"
 
-# Kill a worker (circuit breaker will open, requests reroute automatically)
-python client/chaos.py --kill worker-2
+# Simulate worker failure — scale down
+docker service scale inference_worker=2
 
-# Add 500ms network delay to a worker (simulates slow node)
-python client/chaos.py --slow worker-3 500
+# Watch circuit breaker trip (check after ~15 seconds)
+Invoke-RestMethod -Uri "http://localhost:8001/workers"
 
-# Recover a killed worker (circuit transitions OPEN → HALF-OPEN → CLOSED)
-python client/chaos.py --recover worker-2
+# Recover — scale back up
+docker service scale inference_worker=4
 
-# Full chaos demo sequence
-python client/chaos.py --kill worker-2
-Start-Sleep 10
-python client/chaos.py --status
-Start-Sleep 30
-python client/chaos.py --recover worker-2
-python client/chaos.py --status
+# Kill one specific worker container
+docker ps --filter "name=inference_worker" --format "{{.Names}}"
+docker stop <container_name>   # Swarm will auto-restart it
+
+# Force restart all workers
+docker service update --force inference_worker
 ```
 
 ---
@@ -175,23 +187,42 @@ python client/chaos.py --status
 # Check all worker statuses (via master API)
 Invoke-RestMethod -Uri "http://localhost:8001/workers"
 
-# Restart one worker
-docker compose restart worker-2
+# Scale workers up or down
+docker service scale inference_worker=4
+docker service scale inference_worker=8
 
 # Restart all workers
-docker compose restart worker-1 worker-2 worker-3 worker-4
+docker service update --force inference_worker
 
-# Stop one worker (to simulate failure)
-docker compose stop worker-3
+# View worker logs (last 20 lines)
+docker service logs inference_worker --tail 20
 
-# Start it back
-docker compose start worker-3
+# View master logs
+docker service logs inference_master --tail 20
 
-# View live logs from one worker
-docker compose logs -f worker-1
+# View load balancer logs
+docker service logs inference_load-balancer --tail 20
+```
 
-# View all worker logs together
-docker compose logs -f worker-1 worker-2 worker-3 worker-4
+---
+
+## Docker Swarm Multi-Node
+
+```powershell
+# Get token to add worker nodes (run on manager machine)
+docker swarm join-token worker
+
+# Check all nodes in the swarm
+docker node ls
+
+# See which node each task runs on
+docker service ps inference_worker
+
+# Remove a node from swarm (run on the node being removed)
+docker swarm leave
+
+# Force remove a node (run on manager)
+docker node rm <node-id>
 ```
 
 ---
@@ -230,8 +261,9 @@ Invoke-RestMethod -Uri "http://localhost:8001/health"   # Master
 Invoke-RestMethod -Uri "http://localhost:8002/health"   # RAG retriever
 Invoke-RestMethod -Uri "http://localhost:8003/health"   # Ingestion service
 
-# Check container states
-docker compose ps
+# Check swarm service states
+docker service ls
+docker stack ps inference
 ```
 
 ---
@@ -269,14 +301,13 @@ master_workers_healthy
 
 ```powershell
 # Open Redis CLI
-docker compose exec redis redis-cli
+docker run --rm -it --network inference_inference-net redis:7-alpine redis-cli -h redis
 
 # Inside redis-cli:
 KEYS *                          # see everything
 KEYS cache:embed:*              # cache entries
 KEYS connections:*              # in-flight per worker
 KEYS queue:*                    # request queues
-GET connections:worker-1        # in-flight count for worker-1
 TTL cache:embed:<hash>          # seconds until a cache entry expires
 ```
 
@@ -285,14 +316,12 @@ TTL cache:embed:<hash>          # seconds until a cache entry expires
 ## Logs
 
 ```powershell
-# All services
-docker compose logs -f
+# All services (last 20 lines each)
+docker service logs inference_load-balancer --tail 20
+docker service logs inference_master --tail 20
+docker service logs inference_rag-retriever --tail 20
+docker service logs inference_worker --tail 20
 
-# One service
-docker compose logs -f load-balancer
-docker compose logs -f master
-docker compose logs -f rag-retriever
-
-# Last 100 lines without following
-docker compose logs --tail 100 worker-1
+# Follow logs live (warning: verbose with 4 worker replicas)
+docker service logs inference_master --follow
 ```

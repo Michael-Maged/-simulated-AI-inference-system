@@ -75,8 +75,9 @@ class NormalUser(HttpUser):
     def infer(self):
         self.client.post(
             "/infer",
-            json={"prompt": random.choice(PROMPTS), "max_tokens": 128, "priority": "normal"},
+            json={"prompt": random.choice(PROMPTS), "max_tokens": 50, "priority": "normal"},
             name="/infer [normal]",
+            timeout=120,
         )
 
 
@@ -90,8 +91,9 @@ class HeavyUser(HttpUser):
         prompt = f"Please provide a detailed explanation of: {random.choice(PROMPTS)}"
         self.client.post(
             "/infer",
-            json={"prompt": prompt, "max_tokens": 256, "priority": "high"},
+            json={"prompt": prompt, "max_tokens": 50, "priority": "high"},
             name="/infer [heavy]",
+            timeout=120,
         )
 
 
@@ -107,6 +109,7 @@ class UniqueUser(HttpUser):
         prompt = f"[{uid}] Explain {topic} in distributed systems with a concrete example."
         self.client.post(
             "/infer",
-            json={"prompt": prompt, "max_tokens": 150, "priority": "normal"},
+            json={"prompt": prompt, "max_tokens": 50, "priority": "normal"},
             name="/infer [unique]",
+            timeout=120,
         )

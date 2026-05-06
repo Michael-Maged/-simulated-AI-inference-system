@@ -4,6 +4,7 @@ import asyncio
 import logging
 import threading
 import time
+import socket
 
 import grpc
 import httpx
@@ -18,9 +19,14 @@ from inference import run_inference
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-WORKER_ID = os.getenv("WORKER_ID", "worker-unknown")
+WORKER_ID = os.getenv("WORKER_ID", socket.gethostname())
 GRPC_PORT = os.getenv("GRPC_PORT", "9001")
 MASTER_URL = os.getenv("MASTER_URL", "http://localhost:8001")
+# Resolve IP at startup — this is the overlay IP valid for this container's lifetime
+try:
+    WORKER_HOST = socket.gethostbyname(socket.gethostname())
+except Exception:
+    WORKER_HOST = socket.gethostname()
 
 INFER_REQUESTS = Counter("worker_infer_requests_total", "Total inference requests", ["worker_id"])
 INFER_LATENCY = Histogram("worker_infer_latency_seconds", "Inference latency", ["worker_id"],
@@ -28,6 +34,7 @@ INFER_LATENCY = Histogram("worker_infer_latency_seconds", "Inference latency", [
 INFER_ERRORS = Counter("worker_infer_errors_total", "Inference errors", ["worker_id"])
 
 _in_flight = 0
+_last_latency_ms = 0.0
 
 
 class WorkerServicer(worker_pb2_grpc.WorkerServicer):
@@ -41,6 +48,8 @@ class WorkerServicer(worker_pb2_grpc.WorkerServicer):
                 run_inference(request.prompt, request.max_tokens)
             )
             loop.close()
+            global _last_latency_ms
+            _last_latency_ms = latency_ms
             INFER_LATENCY.labels(worker_id=WORKER_ID).observe(latency_ms / 1000)
             log.info(f"{WORKER_ID} completed {request.request_id} in {latency_ms:.0f}ms")
             return worker_pb2.InferResponse(
@@ -63,13 +72,32 @@ class WorkerServicer(worker_pb2_grpc.WorkerServicer):
         return worker_pb2.HealthResponse(ready=True)
 
 
+def _register_with_master():
+    """Register this worker with master so it gets discovered automatically."""
+    for attempt in range(10):
+        try:
+            httpx.post(
+                f"{MASTER_URL}/register",
+                json={"worker_id": WORKER_ID, "host": WORKER_HOST, "port": int(GRPC_PORT)},
+                timeout=5.0,
+            )
+            log.info(f"{WORKER_ID} registered with master at {MASTER_URL}")
+            return
+        except Exception as e:
+            log.warning(f"Registration attempt {attempt + 1} failed: {e}")
+            time.sleep(3)
+    log.error(f"{WORKER_ID} could not register with master after 10 attempts")
+
+
 def _send_heartbeat():
     def _loop():
+        # Wait for master to be ready before first heartbeat
+        time.sleep(5)
         while True:
             try:
                 httpx.post(
                     f"{MASTER_URL}/heartbeat",
-                    json={"worker_id": WORKER_ID, "queue_depth": _in_flight, "last_latency_ms": 0.0},
+                    json={"worker_id": WORKER_ID, "queue_depth": _in_flight, "last_latency_ms": _last_latency_ms, "host": WORKER_HOST, "port": int(GRPC_PORT)},
                     timeout=3.0,
                 )
             except Exception:
@@ -81,8 +109,9 @@ def _send_heartbeat():
 
 def serve():
     start_http_server(8080)
+    _register_with_master()
     _send_heartbeat()
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=32))
     worker_pb2_grpc.add_WorkerServicer_to_server(WorkerServicer(), server)
     server.add_insecure_port(f"[::]:{GRPC_PORT}")
     server.start()
