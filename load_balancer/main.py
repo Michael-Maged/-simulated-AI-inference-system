@@ -2,10 +2,11 @@ import os
 import uuid
 import time
 import logging
+import asyncio
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from prometheus_client import make_asgi_app, Counter, Histogram
 
 import sys
@@ -20,7 +21,7 @@ log = logging.getLogger(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 MASTER_URL = os.getenv("MASTER_URL", "http://localhost:8001")
 LB_STRATEGY = os.getenv("LB_STRATEGY", "round_robin")
-CACHE_ENABLED = os.getenv("CACHE_ENABLED", "false").lower() == "true"
+_cache_enabled = os.getenv("CACHE_ENABLED", "false").lower() == "true"
 CACHE_THRESHOLD = float(os.getenv("CACHE_SIMILARITY_THRESHOLD", "0.88"))
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
@@ -60,11 +61,11 @@ async def health():
 
 
 @app.post("/infer", response_model=InferResponse)
-async def infer(body: InferRequest):
+async def infer(request: Request, body: InferRequest):
     start = time.time()
     request_id = str(uuid.uuid4())
 
-    if CACHE_ENABLED:
+    if _cache_enabled:
         cached_response = await _cache.get(body.prompt)
         if cached_response:
             CACHE_HITS.inc()
@@ -78,9 +79,10 @@ async def infer(body: InferRequest):
             )
 
     CACHE_MISSES.inc()
+    REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="false").inc()
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        try:
+    async def _dispatch():
+        async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(
                 f"{MASTER_URL}/dispatch",
                 json={
@@ -91,15 +93,29 @@ async def infer(body: InferRequest):
                 },
             )
             resp.raise_for_status()
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"Master error: {e}")
+            return resp.json()
 
-    data = resp.json()
+    dispatch_task = asyncio.create_task(_dispatch())
+
+    # Poll for client disconnect every second — cancel work if client left
+    while not dispatch_task.done():
+        if await request.is_disconnected():
+            dispatch_task.cancel()
+            log.info(f"Client disconnected, cancelled request {request_id}")
+            raise HTTPException(status_code=499, detail="Client disconnected")
+        await asyncio.sleep(1)
+
+    try:
+        data = dispatch_task.result()
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Master error: {e}")
+    except asyncio.CancelledError:
+        raise HTTPException(status_code=499, detail="Client disconnected")
+
     latency = (time.time() - start) * 1000
     LATENCY.observe(latency / 1000)
-    REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="false").inc()
 
-    if CACHE_ENABLED:
+    if _cache_enabled:
         await _cache.set(body.prompt, data["response"])
 
     return InferResponse(
@@ -117,6 +133,20 @@ async def clear_cache():
     if keys:
         await _redis.delete(*keys)
     return {"deleted": len(keys)}
+
+
+@app.put("/admin/cache/toggle")
+async def toggle_cache(enabled: bool):
+    global _cache_enabled
+    _cache_enabled = enabled
+    log.info(f"Cache {'enabled' if enabled else 'disabled'} at runtime")
+    return {"cache_enabled": _cache_enabled}
+
+
+@app.get("/admin/cache/status")
+async def cache_status():
+    keys = await _redis.keys("cache:embed:*")
+    return {"cache_enabled": _cache_enabled, "entries": len(keys)}
 
 
 @app.get("/admin/strategy")

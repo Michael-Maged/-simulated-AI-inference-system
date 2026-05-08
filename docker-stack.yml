@@ -11,22 +11,27 @@ volumes:
 
 services:
 
-  # ── Ollama: shared AI backend, uses GPU when available ──────────────────────
+  # ── Ollama: one instance per node — each laptop contributes its GPU/CPU ──────
+  # mode: global means Docker Swarm automatically runs one Ollama per node.
+  # Each node downloads the model once into its local ollama-models volume.
+  # Workers connect via the `ollama` service name; Swarm routes to the
+  # Ollama instance on the same node when possible (overlay DNSRR).
   ollama:
     image: ollama/ollama:latest
     networks: [inference-net]
     ports: ["11434:11434"]
     volumes:
       - ollama-models:/root/.ollama
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 8 && ollama pull ${OLLAMA_MODEL:-tinyllama} && wait"]
     environment:
       OLLAMA_HOST: 0.0.0.0
-      OLLAMA_NUM_PARALLEL: "4"        # concurrent inference slots
+      OLLAMA_NUM_PARALLEL: "4"
       OLLAMA_MAX_LOADED_MODELS: "1"
       OLLAMA_KEEP_ALIVE: "24h"
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     deploy:
-      replicas: 1
+      mode: global
       restart_policy:
         condition: on-failure
       resources:
@@ -203,6 +208,7 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
     deploy:
       replicas: 1
       placement:

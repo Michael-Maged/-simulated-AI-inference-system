@@ -4,7 +4,7 @@ import logging
 import sys
 
 import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from prometheus_client import make_asgi_app, Gauge, Counter
 
 sys.path.insert(0, "/app")
@@ -94,16 +94,34 @@ async def heartbeat(body: HeartbeatRequest):
 
 
 @app.post("/dispatch")
-async def dispatch(body: DispatchRequest):
+async def dispatch(request: Request, body: DispatchRequest):
+    work = asyncio.create_task(process_request(
+        _redis, _registry, _circuit_breakers,
+        body.request_id, body.prompt, body.max_tokens, MAX_RETRIES,
+    ))
+    # Cancel downstream gRPC work if the load balancer dropped the connection
+    while not work.done():
+        if await request.is_disconnected():
+            work.cancel()
+            log.info(f"LB disconnected, cancelled {body.request_id}")
+            raise HTTPException(status_code=499, detail="Caller disconnected")
+        await asyncio.sleep(1)
     try:
-        result = await process_request(
-            _redis, _registry, _circuit_breakers,
-            body.request_id, body.prompt, body.max_tokens, MAX_RETRIES,
-        )
-        return result
+        return work.result()
     except RuntimeError as e:
         REQUESTS_FAILED.inc()
         raise HTTPException(status_code=503, detail=str(e))
+
+
+@app.post("/admin/flush")
+async def flush_queue():
+    """Reset all in-flight connection counters — call before each test run."""
+    workers = _registry.all_workers()
+    for w in workers:
+        await _redis.set(f"connections:{w.worker_id}", 0)
+    await _redis.delete("queue:failed")
+    log.info("Queue flushed")
+    return {"flushed": len(workers)}
 
 
 @app.get("/workers", response_model=list[WorkerStatus])

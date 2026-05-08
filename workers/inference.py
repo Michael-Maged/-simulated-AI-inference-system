@@ -27,7 +27,7 @@ async def run_inference(prompt: str, max_tokens: int) -> tuple[str, float]:
     context = await retrieve_context(prompt)
     user_content = f"[CONTEXT]\n{context}\n\n[QUESTION]\n{prompt}" if context else prompt
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=180.0) as client:
         resp = await client.post(
             f"{OLLAMA_URL}/api/chat",
             json={

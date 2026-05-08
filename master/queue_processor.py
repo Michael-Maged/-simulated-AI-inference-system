@@ -35,7 +35,7 @@ async def dispatch_to_worker(
                     max_tokens=max_tokens,
                     priority="normal",
                 ),
-                timeout=120.0,
+                timeout=180.0,
             )
     try:
         response = await loop.run_in_executor(None, _call)

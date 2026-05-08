@@ -1,8 +1,8 @@
 import random
-import uuid
-from locust import HttpUser, task, between, constant_throughput
+import time
+import threading
+from locust import HttpUser, task, between, events
 
-# Large prompt pool so cache saturates slowly
 PROMPTS = [
     "What is a circuit breaker in distributed systems?",
     "Explain load balancing algorithms.",
@@ -46,7 +46,7 @@ PROMPTS = [
     "How does a time-series database store data efficiently?",
     "What is idempotency and why is it important in APIs?",
     "Explain optimistic vs pessimistic locking.",
-    "What is a long-polling vs WebSocket connection?",
+    "What is long-polling vs WebSocket?",
     "How does the gossip protocol spread information?",
     "What is a cold start problem in serverless computing?",
     "Explain the difference between a queue and a topic in messaging.",
@@ -56,60 +56,61 @@ PROMPTS = [
     "Explain canary deployments and blue-green deployments.",
 ]
 
-TOPICS = [
-    "load shedding", "request hedging", "tail latency", "cache stampede",
-    "split-brain problem", "network partitions", "quorum reads", "vector clocks",
-    "lamport timestamps", "CRDT data structures", "event sourcing", "CQRS pattern",
-    "bulkhead pattern", "timeout budget", "deadline propagation", "service discovery",
-    "health check endpoints", "graceful degradation", "chaos engineering",
-    "capacity planning", "SLO vs SLA", "error budget", "toil in SRE",
-]
+REQUEST_TIMEOUT = 180  # seconds — must match server-side timeouts
+
+# Track in-flight requests: {key: start_time}
+_in_flight = {}
+_lock = threading.Lock()
 
 
-class NormalUser(HttpUser):
-    """Simulates typical users picking from the shared prompt pool — will hit cache after warmup."""
-    wait_time = between(0.1, 1.0)
-    weight = 5
+@events.quitting.add_listener
+def mark_abandoned_as_failed(environment, **kwargs):
+    """
+    When the test ends, any still-pending request gets the full REQUEST_TIMEOUT
+    as its response time before being marked failed. This correctly represents
+    that the request was abandoned mid-wait, not that it instantly failed.
+    """
+    with _lock:
+        abandoned = dict(_in_flight)
+
+    if not abandoned:
+        return
+
+    print(f"\n[locust] {len(abandoned)} requests still in-flight when test ended — marking as failed with {REQUEST_TIMEOUT}s response time")
+
+    for key, start in abandoned.items():
+        elapsed_ms = (time.time() - start) * 1000
+        # Use the full timeout as response time if request hasn't hit it yet,
+        # otherwise use actual elapsed time (request was already past deadline)
+        reported_ms = max(elapsed_ms, REQUEST_TIMEOUT * 1000)
+        environment.events.request.fire(
+            request_type="POST",
+            name="/infer [abandoned]",
+            response_time=reported_ms,
+            response_length=0,
+            exception=Exception(f"Request abandoned after {reported_ms/1000:.1f}s — test ended before completion"),
+            context={},
+        )
+
+
+class InferenceUser(HttpUser):
+    wait_time = between(1, 3)
 
     @task
     def infer(self):
-        self.client.post(
-            "/infer",
-            json={"prompt": random.choice(PROMPTS), "max_tokens": 50, "priority": "normal"},
-            name="/infer [normal]",
-            timeout=120,
-        )
+        key = f"{id(self)}-{time.monotonic()}"
+        start = time.time()
 
+        with _lock:
+            _in_flight[key] = start
 
-class HeavyUser(HttpUser):
-    """Sends longer requests at high frequency."""
-    wait_time = constant_throughput(0.5)
-    weight = 2
-
-    @task
-    def infer_heavy(self):
-        prompt = f"Please provide a detailed explanation of: {random.choice(PROMPTS)}"
-        self.client.post(
-            "/infer",
-            json={"prompt": prompt, "max_tokens": 50, "priority": "high"},
-            name="/infer [heavy]",
-            timeout=120,
-        )
-
-
-class UniqueUser(HttpUser):
-    """Generates unique prompts every request — always bypasses cache, keeps workers busy."""
-    wait_time = between(0.5, 2.0)
-    weight = 3
-
-    @task
-    def infer_unique(self):
-        topic = random.choice(TOPICS)
-        uid = uuid.uuid4().hex[:6]
-        prompt = f"[{uid}] Explain {topic} in distributed systems with a concrete example."
-        self.client.post(
-            "/infer",
-            json={"prompt": prompt, "max_tokens": 50, "priority": "normal"},
-            name="/infer [unique]",
-            timeout=120,
-        )
+        try:
+            self.client.post(
+                "/infer",
+                json={"prompt": random.choice(PROMPTS), "max_tokens": 10, "priority": "normal"},
+                name="/infer",
+                timeout=REQUEST_TIMEOUT,
+            )
+        finally:
+            with _lock:
+                _in_flight.pop(key, None)

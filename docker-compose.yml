@@ -9,6 +9,29 @@ volumes:
   ollama-models:
 
 services:
+
+  # ── Ollama: local AI backend ─────────────────────────────────────────────────
+  # Pulls the model on first start, persists it in ollama-models volume.
+  # GPU is used automatically if NVIDIA Container Toolkit is installed.
+  ollama:
+    image: ollama/ollama:latest
+    networks: [inference-net]
+    ports: ["11434:11434"]
+    volumes:
+      - ollama-models:/root/.ollama
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 8 && ollama pull ${OLLAMA_MODEL:-tinyllama} && wait"]
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_NUM_PARALLEL: "4"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "24h"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q ${OLLAMA_MODEL:-tinyllama} || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
   redis:
     image: redis:7-alpine
     networks: [inference-net]
@@ -125,18 +148,18 @@ services:
       WORKER_ID: worker-1
       WORKER_HOST: worker-1
       GRPC_PORT: "9001"
-      OLLAMA_URL: http://localhost:11434
+      OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
       RAG_TOP_K: "3"
       MAX_QUEUE_DEPTH: "50"
-    volumes:
-      - ollama-models:/root/.ollama
     depends_on:
       master:
         condition: service_healthy
       rag-retriever:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     restart: always
 
@@ -150,18 +173,18 @@ services:
       WORKER_ID: worker-2
       WORKER_HOST: worker-2
       GRPC_PORT: "9002"
-      OLLAMA_URL: http://localhost:11434
+      OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
       RAG_TOP_K: "3"
       MAX_QUEUE_DEPTH: "50"
-    volumes:
-      - ollama-models:/root/.ollama
     depends_on:
       master:
         condition: service_healthy
       rag-retriever:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     restart: always
 
@@ -175,18 +198,18 @@ services:
       WORKER_ID: worker-3
       WORKER_HOST: worker-3
       GRPC_PORT: "9003"
-      OLLAMA_URL: http://localhost:11434
+      OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
       RAG_TOP_K: "3"
       MAX_QUEUE_DEPTH: "50"
-    volumes:
-      - ollama-models:/root/.ollama
     depends_on:
       master:
         condition: service_healthy
       rag-retriever:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     restart: always
 
@@ -200,18 +223,18 @@ services:
       WORKER_ID: worker-4
       WORKER_HOST: worker-4
       GRPC_PORT: "9004"
-      OLLAMA_URL: http://localhost:11434
+      OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
       RAG_URL: http://rag-retriever:8002
       MASTER_URL: http://master:8001
       RAG_TOP_K: "3"
       MAX_QUEUE_DEPTH: "50"
-    volumes:
-      - ollama-models:/root/.ollama
     depends_on:
       master:
         condition: service_healthy
       rag-retriever:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     restart: always
 

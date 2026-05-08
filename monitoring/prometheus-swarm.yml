@@ -1,0 +1,69 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: load-balancer
+    static_configs:
+      - targets: [load-balancer:8000]
+
+  - job_name: master
+    static_configs:
+      - targets: [master:8001]
+
+  - job_name: rag-retriever
+    static_configs:
+      - targets: [rag-retriever:8002]
+
+  - job_name: ingestion-service
+    static_configs:
+      - targets: [ingestion-service:8003]
+
+  # Dynamically discovers all worker replicas across all Swarm nodes.
+  # No need to hardcode worker-1..4 — works for any replica count.
+  - job_name: workers
+    dockerswarm_sd_configs:
+      - host: unix:///var/run/docker.sock
+        role: tasks
+        filters:
+          - name: service
+            values: [inference_worker]
+    relabel_configs:
+      # Only scrape tasks that are in the running desired state
+      - source_labels: [__meta_dockerswarm_task_desired_state]
+        regex: running
+        action: keep
+      # Replace address with the task IP + metrics port 8080
+      - source_labels: [__address__]
+        regex: '([^:]+).*'
+        replacement: '${1}:8080'
+        target_label: __address__
+      # Create a human-readable instance label: inference_worker-1, etc.
+      - source_labels: [__meta_dockerswarm_service_name, __meta_dockerswarm_task_slot]
+        separator: '-'
+        target_label: instance
+      # Tag which physical node the worker is on
+      - source_labels: [__meta_dockerswarm_node_hostname]
+        target_label: node
+
+  # Scrape Ollama metrics from every node (global service)
+  - job_name: ollama
+    dockerswarm_sd_configs:
+      - host: unix:///var/run/docker.sock
+        role: tasks
+        filters:
+          - name: service
+            values: [inference_ollama]
+    relabel_configs:
+      - source_labels: [__meta_dockerswarm_task_desired_state]
+        regex: running
+        action: keep
+      - source_labels: [__address__]
+        regex: '([^:]+).*'
+        replacement: '${1}:11434'
+        target_label: __address__
+      - source_labels: [__meta_dockerswarm_node_hostname]
+        target_label: node
