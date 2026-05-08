@@ -19,7 +19,14 @@
       "Bash(docker exec 0cfe486907d7 *)",
       "Bash(docker exec d99e16f6e593 *)",
       "Bash(docker service *)",
-      "Bash(python -c \"import sys,json; routes=[r['path'] for r in json.load\\(sys.stdin\\)['paths'].keys\\(\\)]; print\\('\\\\n'.join\\(routes\\)\\)\")"
+      "Bash(python -c \"import sys,json; routes=[r['path'] for r in json.load\\(sys.stdin\\)['paths'].keys\\(\\)]; print\\('\\\\n'.join\\(routes\\)\\)\")",
+      "PowerShell(docker service ls *)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8000/health\" -Method GET; Invoke-RestMethod -Uri \"http://localhost:8001/health\" -Method GET)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8000/health\" | ConvertTo-Json; Invoke-RestMethod -Uri \"http://localhost:8001/health\" | ConvertTo-Json)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8001/workers\" | ConvertTo-Json -Depth 3)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8001/admin/flush\" -Method POST | ConvertTo-Json)",
+      "PowerShell(docker swarm join-token *)",
+      "PowerShell(docker node ls *)"
     ]
   }
 }

@@ -188,7 +188,7 @@ services:
       CACHE_TTL_SECONDS: "3600"
       EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
     deploy:
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: on-failure
       resources:
