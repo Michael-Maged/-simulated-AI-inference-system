@@ -22,15 +22,11 @@ scrape_configs:
     static_configs:
       - targets: [ingestion-service:8003]
 
-  # Swarm service discovery — auto-finds all worker task IPs across nodes.
-  # Requires /var/run/docker.sock mounted into Prometheus container.
   - job_name: workers
-    dockerswarm_sd_configs:
-      - host: unix:///var/run/docker.sock
-        role: tasks
-        filters:
-          - name: service
-            values: [inference_worker]
+    dns_sd_configs:
+      - names: [tasks.inference_worker]
+        type: A
+        port: 8080
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
