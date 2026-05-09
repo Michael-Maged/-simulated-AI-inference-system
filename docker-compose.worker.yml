@@ -7,7 +7,7 @@ services:
     entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 8 && ollama pull ${OLLAMA_MODEL:-tinyllama} && wait"]
     environment:
       OLLAMA_HOST: 0.0.0.0
-      OLLAMA_NUM_PARALLEL: "4"
+      OLLAMA_NUM_PARALLEL: "8"
       OLLAMA_MAX_LOADED_MODELS: "1"
       OLLAMA_KEEP_ALIVE: "24h"
       NVIDIA_VISIBLE_DEVICES: all
@@ -20,7 +20,7 @@ services:
 
   worker-9:
     image: localhost/worker:latest
-    ports: ["9009:9001"]
+    ports: ["9009:9001", "8089:8080"]
     environment:
       GRPC_PORT: "9001"
       WORKER_ID: "worker-9"
@@ -36,7 +36,7 @@ services:
 
   worker-10:
     image: localhost/worker:latest
-    ports: ["9010:9001"]
+    ports: ["9010:9001", "8090:8080"]
     environment:
       GRPC_PORT: "9001"
       WORKER_ID: "worker-10"
@@ -52,7 +52,7 @@ services:
 
   worker-11:
     image: localhost/worker:latest
-    ports: ["9011:9001"]
+    ports: ["9011:9001", "8091:8080"]
     environment:
       GRPC_PORT: "9001"
       WORKER_ID: "worker-11"
@@ -68,7 +68,7 @@ services:
 
   worker-12:
     image: localhost/worker:latest
-    ports: ["9012:9001"]
+    ports: ["9012:9001", "8092:8080"]
     environment:
       GRPC_PORT: "9001"
       WORKER_ID: "worker-12"
@@ -84,7 +84,7 @@ services:
 
   worker-13:
     image: localhost/worker:latest
-    ports: ["9013:9001"]
+    ports: ["9013:9001", "8093:8080"]
     environment:
       GRPC_PORT: "9001"
       WORKER_ID: "worker-13"
@@ -100,7 +100,7 @@ services:
 
   worker-14:
     image: localhost/worker:latest
-    ports: ["9014:9001"]
+    ports: ["9014:9001", "8094:8080"]
     environment:
       GRPC_PORT: "9001"
       WORKER_ID: "worker-14"
@@ -116,7 +116,7 @@ services:
 
   worker-15:
     image: localhost/worker:latest
-    ports: ["9015:9001"]
+    ports: ["9015:9001", "8095:8080"]
     environment:
       GRPC_PORT: "9001"
       WORKER_ID: "worker-15"
@@ -132,7 +132,7 @@ services:
 
   worker-16:
     image: localhost/worker:latest
-    ports: ["9016:9001"]
+    ports: ["9016:9001", "8096:8080"]
     environment:
       GRPC_PORT: "9001"
       WORKER_ID: "worker-16"

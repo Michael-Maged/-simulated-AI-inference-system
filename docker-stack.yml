@@ -25,7 +25,7 @@ services:
     entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 8 && ollama pull ${OLLAMA_MODEL:-tinyllama} && wait"]
     environment:
       OLLAMA_HOST: 0.0.0.0
-      OLLAMA_NUM_PARALLEL: "4"
+      OLLAMA_NUM_PARALLEL: "8"
       OLLAMA_MAX_LOADED_MODELS: "1"
       OLLAMA_KEEP_ALIVE: "24h"
       NVIDIA_VISIBLE_DEVICES: all
@@ -163,7 +163,7 @@ services:
       MAX_QUEUE_DEPTH: "50"
       WORKER_ID: "worker-{{.Task.Slot}}"
     deploy:
-      replicas: ${WORKER_REPLICAS:-4}
+      replicas: ${WORKER_REPLICAS:-8}
       restart_policy:
         condition: on-failure
         max_attempts: 5

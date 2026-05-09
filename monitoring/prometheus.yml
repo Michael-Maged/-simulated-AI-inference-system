@@ -30,3 +30,15 @@ scrape_configs:
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
+
+  - job_name: workers-node2
+    static_configs:
+      - targets:
+          - 192.168.1.231:8089
+          - 192.168.1.231:8090
+          - 192.168.1.231:8091
+          - 192.168.1.231:8092
+          - 192.168.1.231:8093
+          - 192.168.1.231:8094
+          - 192.168.1.231:8095
+          - 192.168.1.231:8096

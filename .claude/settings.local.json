@@ -26,7 +26,15 @@
       "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8001/workers\" | ConvertTo-Json -Depth 3)",
       "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8001/admin/flush\" -Method POST | ConvertTo-Json)",
       "PowerShell(docker swarm join-token *)",
-      "PowerShell(docker node ls *)"
+      "PowerShell(docker node ls *)",
+      "Bash(git push *)",
+      "PowerShell(docker image *)",
+      "PowerShell(docker service logs *)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8001/admin/flush\" -Method POST | ConvertTo-Json; Invoke-RestMethod -Uri \"http://localhost:8001/workers\" | ConvertTo-Json -Depth 2)",
+      "PowerShell(docker service scale *)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8001/workers\" | ConvertTo-Json -Depth 2)",
+      "PowerShell(docker service update *)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:9090/-/reload\" -Method POST)"
     ]
   }
 }
