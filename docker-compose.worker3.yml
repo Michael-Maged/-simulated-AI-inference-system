@@ -1,0 +1,150 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes:
+      - ollama-models:/root/.ollama
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 8 && ollama pull ${OLLAMA_MODEL:-tinyllama} && wait"]
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_NUM_PARALLEL: "8"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "24h"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G
+
+  worker-17:
+    image: localhost/worker:latest
+    ports: ["9017:9001", "8097:8080"]
+    environment:
+      GRPC_PORT: "9001"
+      WORKER_ID: "worker-17"
+      WORKER_HOST: "${NODE_IP}"
+      WORKER_GRPC_PORT: "9017"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://${MANAGER_IP}:8002
+      MASTER_URL: http://${MANAGER_IP}:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    depends_on: [ollama]
+
+  worker-18:
+    image: localhost/worker:latest
+    ports: ["9018:9001", "8098:8080"]
+    environment:
+      GRPC_PORT: "9001"
+      WORKER_ID: "worker-18"
+      WORKER_HOST: "${NODE_IP}"
+      WORKER_GRPC_PORT: "9018"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://${MANAGER_IP}:8002
+      MASTER_URL: http://${MANAGER_IP}:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    depends_on: [ollama]
+
+  worker-19:
+    image: localhost/worker:latest
+    ports: ["9019:9001", "8099:8080"]
+    environment:
+      GRPC_PORT: "9001"
+      WORKER_ID: "worker-19"
+      WORKER_HOST: "${NODE_IP}"
+      WORKER_GRPC_PORT: "9019"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://${MANAGER_IP}:8002
+      MASTER_URL: http://${MANAGER_IP}:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    depends_on: [ollama]
+
+  worker-20:
+    image: localhost/worker:latest
+    ports: ["9020:9001", "8100:8080"]
+    environment:
+      GRPC_PORT: "9001"
+      WORKER_ID: "worker-20"
+      WORKER_HOST: "${NODE_IP}"
+      WORKER_GRPC_PORT: "9020"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://${MANAGER_IP}:8002
+      MASTER_URL: http://${MANAGER_IP}:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    depends_on: [ollama]
+
+  worker-21:
+    image: localhost/worker:latest
+    ports: ["9021:9001", "8101:8080"]
+    environment:
+      GRPC_PORT: "9001"
+      WORKER_ID: "worker-21"
+      WORKER_HOST: "${NODE_IP}"
+      WORKER_GRPC_PORT: "9021"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://${MANAGER_IP}:8002
+      MASTER_URL: http://${MANAGER_IP}:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    depends_on: [ollama]
+
+  worker-22:
+    image: localhost/worker:latest
+    ports: ["9022:9001", "8102:8080"]
+    environment:
+      GRPC_PORT: "9001"
+      WORKER_ID: "worker-22"
+      WORKER_HOST: "${NODE_IP}"
+      WORKER_GRPC_PORT: "9022"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://${MANAGER_IP}:8002
+      MASTER_URL: http://${MANAGER_IP}:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    depends_on: [ollama]
+
+  worker-23:
+    image: localhost/worker:latest
+    ports: ["9023:9001", "8103:8080"]
+    environment:
+      GRPC_PORT: "9001"
+      WORKER_ID: "worker-23"
+      WORKER_HOST: "${NODE_IP}"
+      WORKER_GRPC_PORT: "9023"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://${MANAGER_IP}:8002
+      MASTER_URL: http://${MANAGER_IP}:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    depends_on: [ollama]
+
+  worker-24:
+    image: localhost/worker:latest
+    ports: ["9024:9001", "8104:8080"]
+    environment:
+      GRPC_PORT: "9001"
+      WORKER_ID: "worker-24"
+      WORKER_HOST: "${NODE_IP}"
+      WORKER_GRPC_PORT: "9024"
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_URL: http://${MANAGER_IP}:8002
+      MASTER_URL: http://${MANAGER_IP}:8001
+      RAG_TOP_K: "3"
+      MAX_QUEUE_DEPTH: "50"
+    depends_on: [ollama]
+
+volumes:
+  ollama-models:

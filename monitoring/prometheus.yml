@@ -42,3 +42,29 @@ scrape_configs:
           - 192.168.1.231:8094
           - 192.168.1.231:8095
           - 192.168.1.231:8096
+
+  # Node 3 — update NODE3_IP when network is known
+  # - job_name: workers-node3
+  #   static_configs:
+  #     - targets:
+  #         - NODE3_IP:8097
+  #         - NODE3_IP:8098
+  #         - NODE3_IP:8099
+  #         - NODE3_IP:8100
+  #         - NODE3_IP:8101
+  #         - NODE3_IP:8102
+  #         - NODE3_IP:8103
+  #         - NODE3_IP:8104
+
+  # Node 4 — update NODE4_IP when network is known
+  # - job_name: workers-node4
+  #   static_configs:
+  #     - targets:
+  #         - NODE4_IP:8105
+  #         - NODE4_IP:8106
+  #         - NODE4_IP:8107
+  #         - NODE4_IP:8108
+  #         - NODE4_IP:8109
+  #         - NODE4_IP:8110
+  #         - NODE4_IP:8111
+  #         - NODE4_IP:8112
