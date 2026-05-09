@@ -1,57 +1,25 @@
-# Command Reference
+# Commands
 
-Quick copy-paste commands for everything in the system. Run all commands from the project root unless noted.
+All commands run from the project root.
 
 ---
 
-## Stack
+## Health Checks
 
 ```powershell
-# First time setup — init swarm and deploy
-docker swarm init
-docker stack deploy -c docker-stack.yml inference
-
-# Every time after (swarm already initialized)
-docker stack deploy -c docker-stack.yml inference
-
-# Stop everything
-docker stack rm inference
-
-# Fresh start (stop + leave swarm)
-docker stack rm inference
-docker swarm leave --force
-
-# Check all services and replica counts
-docker service ls
-
-# Check which node each task is running on
-docker stack ps inference
-
-# Rebuild one image and update its service
-docker build -t localhost/master:latest -f master/Dockerfile .
-docker service update --image localhost/master:latest inference_master
-
-docker build -t localhost/load-balancer:latest -f load_balancer/Dockerfile .
-docker service update --image localhost/load-balancer:latest inference_load-balancer
-
-docker build -t localhost/worker:latest -f workers/Dockerfile .
-docker service update --image localhost/worker:latest inference_worker
+Invoke-RestMethod -Uri "http://localhost:8000/health"   # Load balancer
+Invoke-RestMethod -Uri "http://localhost:8001/health"   # Master
+Invoke-RestMethod -Uri "http://localhost:8001/workers"  # All worker statuses
+docker service ls                                        # All service replica counts
 ```
 
 ---
 
-## Single Request
+## Queue
 
 ```powershell
-# Send one inference request
-Invoke-RestMethod -Uri "http://localhost:8000/infer" -Method POST `
-  -ContentType "application/json" `
-  -Body '{"prompt": "What is a circuit breaker?", "max_tokens": 100}'
-
-# Send it again — should return cached: true instantly
-Invoke-RestMethod -Uri "http://localhost:8000/infer" -Method POST `
-  -ContentType "application/json" `
-  -Body '{"prompt": "What is a circuit breaker?", "max_tokens": 100}'
+# Flush in-flight queue counters (run before every test)
+Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
 ```
 
 ---
@@ -59,17 +27,16 @@ Invoke-RestMethod -Uri "http://localhost:8000/infer" -Method POST `
 ## Cache
 
 ```powershell
-# Clear all cached responses (via API)
+# Check status
+Invoke-RestMethod -Uri "http://localhost:8000/admin/cache/status"
+
+# Clear all cached responses
 Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
 
-# Clear cache directly via Redis
-docker run --rm --network inference_inference-net redis:7-alpine redis-cli -h redis EVAL "local k=redis.call('keys','cache:embed:*') if #k>0 then return redis.call('del',unpack(k)) else return 0 end" 0
-
-# Count how many cache entries exist
-docker run --rm --network inference_inference-net redis:7-alpine redis-cli -h redis KEYS "cache:embed:*"
+# Enable / Disable
+Invoke-RestMethod -Uri "http://localhost:8000/admin/cache/toggle?enabled=true" -Method PUT
+Invoke-RestMethod -Uri "http://localhost:8000/admin/cache/toggle?enabled=false" -Method PUT
 ```
-
-> Clear the cache before running load tests so requests actually reach workers and produce metrics.
 
 ---
 
@@ -79,172 +46,97 @@ docker run --rm --network inference_inference-net redis:7-alpine redis-cli -h re
 # Check current strategy
 Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy"
 
-# Switch to Round Robin
+# Switch strategy
 Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=round_robin" -Method PUT
-
-# Switch to Least Connections
 Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=least_connections" -Method PUT
-
-# Switch to Load-Aware (default)
 Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=load_aware" -Method PUT
 ```
 
 ---
 
-## Load Tests (Locust)
-
-Install once:
-```powershell
-pip install locust
-```
+## Scale Workers
 
 ```powershell
-# Quick smoke test — 20 users, 60 seconds
-locust -f client/locustfile.py --host http://localhost:8000 `
-  --users 20 --spawn-rate 2 --run-time 60s --headless
-
-# Small load — 100 users, 2 minutes
-locust -f client/locustfile.py --host http://localhost:8000 `
-  --users 100 --spawn-rate 5 --run-time 2m --headless
-
-# Medium load — 500 users, 5 minutes
-locust -f client/locustfile.py --host http://localhost:8000 `
-  --users 500 --spawn-rate 20 --run-time 5m --headless
-
-# Peak load — 1000 users, 10 minutes (with CSV output for graphs)
-locust -f client/locustfile.py --host http://localhost:8000 `
-  --users 1000 --spawn-rate 50 --run-time 10m --headless `
-  --csv client/results/peak_1000
-
-# 1500 users (stress test)
-locust -f client/locustfile.py --host http://localhost:8000 `
-  --users 1500 --spawn-rate 50 --run-time 10m --headless `
-  --csv client/results/stress_1500
-
-# With Locust web UI (open http://localhost:8089 to control it)
-locust -f client/locustfile.py --host http://localhost:8000
-```
-
-### Strategy Comparison Tests
-
-Run these back-to-back, clearing cache before each:
-
-```powershell
-# Round Robin test
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
-Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=round_robin" -Method PUT
-locust -f client/locustfile.py --host http://localhost:8000 `
-  --users 200 --spawn-rate 10 --run-time 3m --headless `
-  --csv client/results/round_robin
-
-# Least Connections test
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
-Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=least_connections" -Method PUT
-locust -f client/locustfile.py --host http://localhost:8000 `
-  --users 200 --spawn-rate 10 --run-time 3m --headless `
-  --csv client/results/least_connections
-
-# Load-Aware test
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
-Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=load_aware" -Method PUT
-locust -f client/locustfile.py --host http://localhost:8000 `
-  --users 200 --spawn-rate 10 --run-time 3m --headless `
-  --csv client/results/load_aware
-```
-
----
-
-## Chaos Tests
-
-Run while a Locust test is active in another terminal.
-
-```powershell
-# Check all worker statuses (alive, circuit state, queue depth, latency)
-Invoke-RestMethod -Uri "http://localhost:8001/workers"
-
-# Simulate worker failure — scale down
-docker service scale inference_worker=2
-
-# Watch circuit breaker trip (check after ~15 seconds)
-Invoke-RestMethod -Uri "http://localhost:8001/workers"
-
-# Recover — scale back up
-docker service scale inference_worker=4
-
-# Kill one specific worker container
-docker ps --filter "name=inference_worker" --format "{{.Names}}"
-docker stop <container_name>   # Swarm will auto-restart it
-
-# Force restart all workers
-docker service update --force inference_worker
-```
-
----
-
-## Worker Management
-
-```powershell
-# Check all worker statuses (via master API)
-Invoke-RestMethod -Uri "http://localhost:8001/workers"
-
-# Scale workers up or down
 docker service scale inference_worker=4
 docker service scale inference_worker=8
-
-# Restart all workers
-docker service update --force inference_worker
-
-# View worker logs (last 20 lines)
-docker service logs inference_worker --tail 20
-
-# View master logs
-docker service logs inference_master --tail 20
-
-# View load balancer logs
-docker service logs inference_load-balancer --tail 20
+docker service scale inference_worker=16
 ```
 
 ---
 
-## Docker Swarm Multi-Node
+## Chaos Testing
+
+Run while a load test is active in another terminal.
 
 ```powershell
-# Get token to add worker nodes (run on manager machine)
-docker swarm join-token worker
+# Worker status
+python client/chaos.py --status
 
-# Check all nodes in the swarm
-docker node ls
+# Kill a worker (scales down by 1)
+python client/chaos.py --kill worker-2
 
-# See which node each task runs on
-docker service ps inference_worker
+# Add network delay to a worker
+python client/chaos.py --slow worker-3 500
 
-# Remove a node from swarm (run on the node being removed)
-docker swarm leave
+# Recover a killed worker (scales back up by 1)
+python client/chaos.py --recover worker-2
 
-# Force remove a node (run on manager)
-docker node rm <node-id>
+# Set exact worker count
+python client/chaos.py --scale 6
 ```
 
 ---
 
-## Generate Report Graphs
+## Load Tests
 
-Install once:
 ```powershell
-pip install matplotlib pandas
+# Web UI — open http://localhost:8089 (also saves CSV automatically)
+locust -f client/locustfile.py --host http://localhost:8000 --csv client/results/my_test
+
+# Headless tests
+locust -f client/locustfile.py --host http://localhost:8000 --users 20   --spawn-rate 2  --run-time 2m  --headless --csv client/results/scale_20
+locust -f client/locustfile.py --host http://localhost:8000 --users 100  --spawn-rate 5  --run-time 5m  --headless --csv client/results/scale_100
+locust -f client/locustfile.py --host http://localhost:8000 --users 500  --spawn-rate 20 --run-time 10m --headless --csv client/results/scale_500
+locust -f client/locustfile.py --host http://localhost:8000 --users 1000 --spawn-rate 50 --run-time 10m --headless --csv client/results/scale_1000
+locust -f client/locustfile.py --host http://localhost:8000 --users 1500 --spawn-rate 50 --run-time 10m --headless --csv client/results/scale_1500
 ```
 
-```powershell
-# Single test overview (4 charts: RPS, latency, users, failures)
-python client/plot_results.py --csv client/results/peak_1000
+### Strategy Comparison
 
-# Strategy comparison — run after all 3 strategy tests
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
+Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
+Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=round_robin" -Method PUT
+locust -f client/locustfile.py --host http://localhost:8000 --users 200 --spawn-rate 10 --run-time 3m --headless --csv client/results/round_robin
+
+Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
+Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
+Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=least_connections" -Method PUT
+locust -f client/locustfile.py --host http://localhost:8000 --users 200 --spawn-rate 10 --run-time 3m --headless --csv client/results/least_connections
+
+Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
+Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
+Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=load_aware" -Method PUT
+locust -f client/locustfile.py --host http://localhost:8000 --users 200 --spawn-rate 10 --run-time 3m --headless --csv client/results/load_aware
+```
+
+---
+
+## Generate Graphs
+
+```powershell
+pip install matplotlib pandas   # install once
+
+# Single test overview
+python client/plot_results.py --csv client/results/scale_1000
+
+# Strategy comparison
 python client/plot_results.py --compare-strategies `
   --rr client/results/round_robin `
   --lc client/results/least_connections `
   --la client/results/load_aware
 
-# Scaling curve — run after tests at each user count
+# Scaling curve
 python client/plot_results.py --scaling `
   client/results/scale_100 `
   client/results/scale_500 `
@@ -252,89 +144,33 @@ python client/plot_results.py --scaling `
   client/results/scale_1500
 ```
 
-Graphs are saved to `client/results/` as PNG files.
-
 ---
 
-## Unit Tests
+## Monitor GPU
 
 ```powershell
-pip install pytest pytest-asyncio redis numpy
-pytest tests/ -v
+# Run in a separate terminal while test is active
+$cid = docker ps --filter name=inference_ollama --format "{{.ID}}"
+docker exec $cid nvidia-smi dmon -s u -d 2
 ```
 
 ---
 
-## Health Checks
+## Monitoring URLs
 
-```powershell
-# Check all services are up
-Invoke-RestMethod -Uri "http://localhost:8000/health"   # Load balancer
-Invoke-RestMethod -Uri "http://localhost:8001/health"   # Master
-Invoke-RestMethod -Uri "http://localhost:8002/health"   # RAG retriever
-Invoke-RestMethod -Uri "http://localhost:8003/health"   # Ingestion service
-
-# Check swarm service states
-docker service ls
-docker stack ps inference
-```
-
----
-
-## Monitoring
-
-| URL | What it shows |
+| URL | What |
 |---|---|
-| http://localhost:3000 | Grafana dashboard (admin / admin) |
-| http://localhost:9090 | Prometheus — query raw metrics |
-| http://localhost:9090/targets | Which services Prometheus is scraping |
-
-```powershell
-# Useful Prometheus queries (paste into http://localhost:9090)
-
-# Request throughput
-sum(rate(lb_requests_total[1m]))
-
-# Cache hit rate %
-100 * rate(lb_cache_hits_total[5m]) / (rate(lb_cache_hits_total[5m]) + rate(lb_cache_misses_total[5m]))
-
-# Worker p95 latency per worker
-histogram_quantile(0.95, sum(rate(worker_infer_latency_seconds_bucket[5m])) by (worker_id, le))
-
-# In-flight connections per worker
-master_queue_depth
-
-# Healthy worker count
-master_workers_healthy
-```
-
----
-
-## Redis Inspection
-
-```powershell
-# Open Redis CLI
-docker run --rm -it --network inference_inference-net redis:7-alpine redis-cli -h redis
-
-# Inside redis-cli:
-KEYS *                          # see everything
-KEYS cache:embed:*              # cache entries
-KEYS connections:*              # in-flight per worker
-KEYS queue:*                    # request queues
-TTL cache:embed:<hash>          # seconds until a cache entry expires
-```
+| http://localhost:3000 | Grafana (admin / admin) |
+| http://localhost:9090/targets | Prometheus scrape targets |
+| http://localhost:8001/workers | Worker registry |
 
 ---
 
 ## Logs
 
 ```powershell
-# All services (last 20 lines each)
-docker service logs inference_load-balancer --tail 20
-docker service logs inference_master --tail 20
-docker service logs inference_rag-retriever --tail 20
-docker service logs inference_worker --tail 20
-
-# Follow logs live (warning: verbose with 4 worker replicas)
-docker service logs inference_master --follow
+docker service logs inference_load-balancer --tail 30
+docker service logs inference_master --tail 30
+docker service logs inference_worker --tail 30
+docker service logs inference_ollama --tail 30
 ```
