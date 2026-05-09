@@ -229,17 +229,30 @@ docker node rm <node-id>
 
 ## Generate Report Graphs
 
+Install once:
 ```powershell
 pip install matplotlib pandas
-
-# Generate graphs from a specific test run
-python client/plot_results.py --csv-prefix client/results/peak_1000 --out client/results/
-
-# After running all 3 strategy tests, compare them
-python client/plot_results.py --csv-prefix client/results/round_robin --out client/results/
-python client/plot_results.py --csv-prefix client/results/least_connections --out client/results/
-python client/plot_results.py --csv-prefix client/results/load_aware --out client/results/
 ```
+
+```powershell
+# Single test overview (4 charts: RPS, latency, users, failures)
+python client/plot_results.py --csv client/results/peak_1000
+
+# Strategy comparison — run after all 3 strategy tests
+python client/plot_results.py --compare-strategies `
+  --rr client/results/round_robin `
+  --lc client/results/least_connections `
+  --la client/results/load_aware
+
+# Scaling curve — run after tests at each user count
+python client/plot_results.py --scaling `
+  client/results/scale_100 `
+  client/results/scale_500 `
+  client/results/scale_1000 `
+  client/results/scale_1500
+```
+
+Graphs are saved to `client/results/` as PNG files.
 
 ---
 
