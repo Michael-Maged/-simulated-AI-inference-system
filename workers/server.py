@@ -22,16 +22,11 @@ log = logging.getLogger(__name__)
 WORKER_ID = os.getenv("WORKER_ID", socket.gethostname())
 GRPC_PORT = os.getenv("GRPC_PORT", "9001")
 MASTER_URL = os.getenv("MASTER_URL", "http://localhost:8001")
-# WORKER_HOST / WORKER_GRPC_PORT allow cross-host deployments to advertise
-# the host machine's IP and published port instead of the container's overlay IP.
-_resolved_host = os.getenv("WORKER_HOST")
-if not _resolved_host:
-    try:
-        _resolved_host = socket.gethostbyname(socket.gethostname())
-    except Exception:
-        _resolved_host = socket.gethostname()
-WORKER_HOST = _resolved_host
-WORKER_GRPC_PORT = int(os.getenv("WORKER_GRPC_PORT", GRPC_PORT))
+# Resolve IP at startup — this is the overlay IP valid for this container's lifetime
+try:
+    WORKER_HOST = socket.gethostbyname(socket.gethostname())
+except Exception:
+    WORKER_HOST = socket.gethostname()
 
 INFER_REQUESTS = Counter("worker_infer_requests_total", "Total inference requests", ["worker_id"])
 INFER_LATENCY = Histogram("worker_infer_latency_seconds", "Inference latency", ["worker_id"],
@@ -83,7 +78,7 @@ def _register_with_master():
         try:
             httpx.post(
                 f"{MASTER_URL}/register",
-                json={"worker_id": WORKER_ID, "host": WORKER_HOST, "port": WORKER_GRPC_PORT},
+                json={"worker_id": WORKER_ID, "host": WORKER_HOST, "port": int(GRPC_PORT)},
                 timeout=5.0,
             )
             log.info(f"{WORKER_ID} registered with master at {MASTER_URL}")
@@ -102,7 +97,7 @@ def _send_heartbeat():
             try:
                 httpx.post(
                     f"{MASTER_URL}/heartbeat",
-                    json={"worker_id": WORKER_ID, "queue_depth": _in_flight, "last_latency_ms": _last_latency_ms, "host": WORKER_HOST, "port": WORKER_GRPC_PORT},
+                    json={"worker_id": WORKER_ID, "queue_depth": _in_flight, "last_latency_ms": _last_latency_ms, "host": WORKER_HOST, "port": int(GRPC_PORT)},
                     timeout=3.0,
                 )
             except Exception:

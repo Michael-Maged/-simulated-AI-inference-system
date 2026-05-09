@@ -2,11 +2,10 @@ import os
 import uuid
 import time
 import logging
-import asyncio
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from prometheus_client import make_asgi_app, Counter, Histogram
 
 import sys
@@ -21,7 +20,7 @@ log = logging.getLogger(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 MASTER_URL = os.getenv("MASTER_URL", "http://localhost:8001")
 LB_STRATEGY = os.getenv("LB_STRATEGY", "round_robin")
-_cache_enabled = os.getenv("CACHE_ENABLED", "false").lower() == "true"
+CACHE_ENABLED = os.getenv("CACHE_ENABLED", "false").lower() == "true"
 CACHE_THRESHOLD = float(os.getenv("CACHE_SIMILARITY_THRESHOLD", "0.88"))
 CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
@@ -45,7 +44,10 @@ _strategy = None
 async def startup():
     global _redis, _cache, _strategy
     _redis = aioredis.from_url(REDIS_URL)
-    _cache = SemanticCache(REDIS_URL, CACHE_THRESHOLD, CACHE_TTL, EMBED_MODEL)
+    if CACHE_ENABLED:
+        _cache = SemanticCache(REDIS_URL, CACHE_THRESHOLD, CACHE_TTL, EMBED_MODEL)
+    else:
+        _cache = None
     if LB_STRATEGY == "round_robin":
         _strategy = RoundRobinStrategy()
     elif LB_STRATEGY == "least_connections":
@@ -61,11 +63,11 @@ async def health():
 
 
 @app.post("/infer", response_model=InferResponse)
-async def infer(request: Request, body: InferRequest):
+async def infer(body: InferRequest):
     start = time.time()
     request_id = str(uuid.uuid4())
 
-    if _cache_enabled:
+    if CACHE_ENABLED:
         cached_response = await _cache.get(body.prompt)
         if cached_response:
             CACHE_HITS.inc()
@@ -79,10 +81,9 @@ async def infer(request: Request, body: InferRequest):
             )
 
     CACHE_MISSES.inc()
-    REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="false").inc()
 
-    async def _dispatch():
-        async with httpx.AsyncClient(timeout=180.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        try:
             resp = await client.post(
                 f"{MASTER_URL}/dispatch",
                 json={
@@ -93,29 +94,15 @@ async def infer(request: Request, body: InferRequest):
                 },
             )
             resp.raise_for_status()
-            return resp.json()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Master error: {e}")
 
-    dispatch_task = asyncio.create_task(_dispatch())
-
-    # Poll for client disconnect every second — cancel work if client left
-    while not dispatch_task.done():
-        if await request.is_disconnected():
-            dispatch_task.cancel()
-            log.info(f"Client disconnected, cancelled request {request_id}")
-            raise HTTPException(status_code=499, detail="Client disconnected")
-        await asyncio.sleep(1)
-
-    try:
-        data = dispatch_task.result()
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Master error: {e}")
-    except asyncio.CancelledError:
-        raise HTTPException(status_code=499, detail="Client disconnected")
-
+    data = resp.json()
     latency = (time.time() - start) * 1000
     LATENCY.observe(latency / 1000)
+    REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="false").inc()
 
-    if _cache_enabled:
+    if CACHE_ENABLED:
         await _cache.set(body.prompt, data["response"])
 
     return InferResponse(
@@ -129,24 +116,12 @@ async def infer(request: Request, body: InferRequest):
 
 @app.delete("/admin/cache")
 async def clear_cache():
+    if _redis is None:
+        raise HTTPException(status_code=503, detail="Redis is not initialized")
     keys = await _redis.keys("cache:embed:*")
     if keys:
         await _redis.delete(*keys)
     return {"deleted": len(keys)}
-
-
-@app.put("/admin/cache/toggle")
-async def toggle_cache(enabled: bool):
-    global _cache_enabled
-    _cache_enabled = enabled
-    log.info(f"Cache {'enabled' if enabled else 'disabled'} at runtime")
-    return {"cache_enabled": _cache_enabled}
-
-
-@app.get("/admin/cache/status")
-async def cache_status():
-    keys = await _redis.keys("cache:embed:*")
-    return {"cache_enabled": _cache_enabled, "entries": len(keys)}
 
 
 @app.get("/admin/strategy")
