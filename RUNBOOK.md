@@ -20,12 +20,18 @@ docker service ls
 
 ## 2. Add Other Laptops (Workers Only)
 
-On each extra laptop — open admin PowerShell first:
+On each extra laptop — `git pull` the repo first, then open **admin PowerShell**:
 
 **Node 2 (John) — workers 9-16:**
 ```powershell
+# 1. Open firewall ports
 netsh advfirewall firewall add rule name="Docker Workers" protocol=TCP dir=in localport=9009-9016 action=allow
 netsh advfirewall firewall add rule name="Docker Worker Metrics" protocol=TCP dir=in localport=8089-8096 action=allow
+
+# 2. Build the worker image
+docker build -t localhost/worker:latest -f workers/Dockerfile .
+
+# 3. Start workers
 $env:MANAGER_IP="<YOUR_IP>"
 $env:NODE_IP="<JOHN_IP>"
 docker compose -f docker-compose.worker.yml up
@@ -35,6 +41,9 @@ docker compose -f docker-compose.worker.yml up
 ```powershell
 netsh advfirewall firewall add rule name="Docker Workers" protocol=TCP dir=in localport=9017-9024 action=allow
 netsh advfirewall firewall add rule name="Docker Worker Metrics" protocol=TCP dir=in localport=8097-8104 action=allow
+
+docker build -t localhost/worker:latest -f workers/Dockerfile .
+
 $env:MANAGER_IP="<YOUR_IP>"
 $env:NODE_IP="<NODE3_IP>"
 docker compose -f docker-compose.worker3.yml up
@@ -44,6 +53,9 @@ docker compose -f docker-compose.worker3.yml up
 ```powershell
 netsh advfirewall firewall add rule name="Docker Workers" protocol=TCP dir=in localport=9025-9032 action=allow
 netsh advfirewall firewall add rule name="Docker Worker Metrics" protocol=TCP dir=in localport=8105-8112 action=allow
+
+docker build -t localhost/worker:latest -f workers/Dockerfile .
+
 $env:MANAGER_IP="<YOUR_IP>"
 $env:NODE_IP="<NODE4_IP>"
 docker compose -f docker-compose.worker4.yml up
