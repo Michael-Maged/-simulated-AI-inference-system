@@ -28,6 +28,10 @@ class DispatchRequest(BaseModel):
     prompt: str
     max_tokens: int = 512
     priority: str = "normal"
+    # Routing strategy hint forwarded by the load balancer. The master uses this
+    # to pick a worker from its registry on every dispatch. Accepted values:
+    # "round_robin", "least_connections", "load_aware".
+    strategy: str = "round_robin"
 
 
 class RegisterRequest(BaseModel):

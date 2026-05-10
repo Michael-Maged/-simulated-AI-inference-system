@@ -34,6 +34,9 @@ app.mount("/metrics", metrics_app)
 _redis: aioredis.Redis | None = None
 _registry: WorkerRegistry | None = None
 _circuit_breakers: dict = {}
+# Long-lived strategy cache so RoundRobinStrategy preserves its rotating
+# index across consecutive /dispatch calls. Keyed by strategy name.
+_strategy_cache: dict = {}
 
 
 @app.on_event("startup")
@@ -50,7 +53,7 @@ async def startup():
             _circuit_breakers[host] = CircuitBreaker(host, _redis, CB_THRESHOLD, CB_COOLDOWN)
 
     asyncio.create_task(_heartbeat_monitor())
-    log.info("Master started — waiting for workers to register")
+    log.info("Master started - waiting for workers to register")
 
 
 async def _heartbeat_monitor():
@@ -99,6 +102,8 @@ async def dispatch(body: DispatchRequest):
         result = await process_request(
             _redis, _registry, _circuit_breakers,
             body.request_id, body.prompt, body.max_tokens, MAX_RETRIES,
+            strategy_name=body.strategy,
+            strategy_cache=_strategy_cache,
         )
         return result
     except RuntimeError as e:

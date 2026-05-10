@@ -91,6 +91,10 @@ async def infer(body: InferRequest):
                     "prompt": body.prompt,
                     "max_tokens": body.max_tokens,
                     "priority": body.priority,
+                    # Forward the active strategy so the master picks the worker
+                    # according to the policy this LB advertises. The master
+                    # honours the hint via common.strategies.make_strategy().
+                    "strategy": LB_STRATEGY,
                 },
             )
             resp.raise_for_status()

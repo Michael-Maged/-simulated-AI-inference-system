@@ -8,6 +8,7 @@ import grpc
 sys.path.insert(0, "/app")
 sys.path.insert(0, "/app/common/protos")
 from common.protos import worker_pb2, worker_pb2_grpc
+from common.strategies import make_strategy
 from circuit_breaker import CircuitBreaker
 
 log = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ async def dispatch_to_worker(
 ) -> dict:
     address = f"{worker_info.host}:{worker_info.port}"
     loop = asyncio.get_event_loop()
+
     def _call():
         with grpc.insecure_channel(address) as channel:
             stub = worker_pb2_grpc.WorkerStub(channel)
@@ -37,6 +39,7 @@ async def dispatch_to_worker(
                 ),
                 timeout=120.0,
             )
+
     try:
         response = await loop.run_in_executor(None, _call)
         await circuit_breaker.record_success()
@@ -59,14 +62,30 @@ async def process_request(
     prompt: str,
     max_tokens: int,
     max_retries: int = 3,
+    strategy_name: str = "round_robin",
+    strategy_cache: dict | None = None,
 ) -> dict:
+    """
+    Pick a worker according to ``strategy_name`` and dispatch the inference
+    RPC. Falls back to retry-on-different-worker up to ``max_retries`` times.
+
+    ``strategy_cache`` is an optional dict that lets the caller share strategy
+    instances across requests so RoundRobinStrategy can keep a stable rotating
+    counter. Without it RR would restart at index 0 on every call.
+    """
+    if strategy_cache is None:
+        strategy_cache = {}
+    if strategy_name not in strategy_cache:
+        strategy_cache[strategy_name] = make_strategy(strategy_name)
+    strategy = strategy_cache[strategy_name]
+
     # Wait for a healthy available worker instead of immediately failing
     for wait_attempt in range(20):
         healthy = registry.get_healthy_workers()
         if not healthy:
             raise RuntimeError("No healthy workers available")
 
-        # Find workers with queue capacity
+        # Find workers with queue capacity (circuit-closed and below depth cap)
         candidates = []
         for w in healthy:
             cb = circuit_breakers[w.worker_id]
@@ -74,13 +93,12 @@ async def process_request(
                 continue
             depth = int(await redis.get(f"connections:{w.worker_id}") or 0)
             if depth < MAX_QUEUE_DEPTH:
-                candidates.append((depth, w))
+                candidates.append(w)
 
         if candidates:
-            candidates.sort(key=lambda x: x[0])
             break
 
-        # All workers busy — wait and retry
+        # All workers busy - wait and retry
         log.info(f"All workers at capacity, waiting... (attempt {wait_attempt + 1})")
         await asyncio.sleep(1)
     else:
@@ -90,10 +108,12 @@ async def process_request(
     tried: set = set()
 
     for _ in range(max_retries):
-        available = [(d, w) for d, w in candidates if w.worker_id not in tried]
-        if not available:
+        remaining = [w for w in candidates if w.worker_id not in tried]
+        if not remaining:
             break
-        _, worker = available[0]
+        # Strategy decides which untried, healthy candidate to dispatch to
+        picked_id = await strategy.pick([w.worker_id for w in remaining], redis)
+        worker = next(w for w in remaining if w.worker_id == picked_id)
         tried.add(worker.worker_id)
         cb = circuit_breakers[worker.worker_id]
         await redis.incr(f"connections:{worker.worker_id}")
@@ -103,8 +123,6 @@ async def process_request(
         except RuntimeError as e:
             last_error = e
             log.warning(f"Worker {worker.worker_id} failed, trying next: {e}")
-            # Re-sort remaining candidates on failure
-            candidates = [(d, w) for d, w in candidates if w.worker_id not in tried]
         finally:
             await redis.decr(f"connections:{worker.worker_id}")
 
