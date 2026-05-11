@@ -2,7 +2,7 @@
   "title": "AI Inference System",
   "uid": "inference-main",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "panels": [
     {
@@ -29,20 +29,8 @@
       "id": 3,
       "title": "Healthy Workers",
       "type": "stat",
-      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+      "gridPos": {"h": 4, "w": 12, "x": 0, "y": 8},
       "targets": [{"expr": "master_workers_healthy", "legendFormat": "healthy"}]
-    },
-    {
-      "id": 4,
-      "title": "Cache Hit Rate (%)",
-      "type": "stat",
-      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
-      "targets": [
-        {
-          "expr": "100 * rate(lb_cache_hits_total[5m]) / (rate(lb_cache_hits_total[5m]) + rate(lb_cache_misses_total[5m]))",
-          "legendFormat": "hit rate %"
-        }
-      ]
     },
     {
       "id": 5,
@@ -52,14 +40,50 @@
       "targets": [{"expr": "master_queue_depth", "legendFormat": "queue depth"}]
     },
     {
-      "id": 6,
-      "title": "Worker Inference Latency (p95)",
+      "id": 8,
+      "title": "Node 1 Workers — Inference p95",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 12},
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(worker_infer_latency_seconds_bucket[5m])) by (worker_id, le))",
-          "legendFormat": "{{worker_id}} p95"
+          "expr": "histogram_quantile(0.95, sum(rate(worker_infer_latency_seconds_bucket{job=~\"workers|inference_worker\"}[5m])) by (worker_id, le))",
+          "legendFormat": "{{worker_id}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Node 2 Workers — Inference p95",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 12},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(worker_infer_latency_seconds_bucket{job=\"workers-node2\"}[5m])) by (worker_id, le))",
+          "legendFormat": "{{worker_id}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Node 3 Workers — Inference p95",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 12},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(worker_infer_latency_seconds_bucket{job=\"workers-node3\"}[5m])) by (worker_id, le))",
+          "legendFormat": "{{worker_id}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Node 4 Workers — Inference p95",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 12},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(worker_infer_latency_seconds_bucket{job=\"workers-node4\"}[5m])) by (worker_id, le))",
+          "legendFormat": "{{worker_id}}"
         }
       ]
     },
@@ -67,7 +91,7 @@
       "id": 7,
       "title": "Failed Requests",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
       "targets": [
         {"expr": "rate(master_requests_failed_total[1m])", "legendFormat": "failures/sec"}
       ]

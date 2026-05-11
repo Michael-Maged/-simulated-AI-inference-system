@@ -1,6 +1,6 @@
 import random
 import uuid
-from locust import HttpUser, task, between, constant_throughput
+from locust import HttpUser, task, between
 
 # Large prompt pool so cache saturates slowly
 PROMPTS = [
@@ -67,49 +67,14 @@ TOPICS = [
 
 
 class NormalUser(HttpUser):
-    """Simulates typical users picking from the shared prompt pool — will hit cache after warmup."""
+    """Simulates typical users picking from the shared prompt pool."""
     wait_time = between(0.1, 1.0)
-    weight = 5
 
     @task
     def infer(self):
         self.client.post(
             "/infer",
-            json={"prompt": random.choice(PROMPTS), "max_tokens": 50, "priority": "normal"},
+            json={"prompt": random.choice(PROMPTS), "max_tokens": 30, "priority": "normal"},
             name="/infer [normal]",
-            timeout=120,
-        )
-
-
-class HeavyUser(HttpUser):
-    """Sends longer requests at high frequency."""
-    wait_time = constant_throughput(0.5)
-    weight = 2
-
-    @task
-    def infer_heavy(self):
-        prompt = f"Please provide a detailed explanation of: {random.choice(PROMPTS)}"
-        self.client.post(
-            "/infer",
-            json={"prompt": prompt, "max_tokens": 50, "priority": "high"},
-            name="/infer [heavy]",
-            timeout=120,
-        )
-
-
-class UniqueUser(HttpUser):
-    """Generates unique prompts every request — always bypasses cache, keeps workers busy."""
-    wait_time = between(0.5, 2.0)
-    weight = 3
-
-    @task
-    def infer_unique(self):
-        topic = random.choice(TOPICS)
-        uid = uuid.uuid4().hex[:6]
-        prompt = f"[{uid}] Explain {topic} in distributed systems with a concrete example."
-        self.client.post(
-            "/infer",
-            json={"prompt": prompt, "max_tokens": 50, "priority": "normal"},
-            name="/infer [unique]",
-            timeout=120,
+            timeout=90,
         )

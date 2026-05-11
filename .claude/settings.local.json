@@ -34,7 +34,8 @@
       "PowerShell(docker service scale *)",
       "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8001/workers\" | ConvertTo-Json -Depth 2)",
       "PowerShell(docker service update *)",
-      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:9090/-/reload\" -Method POST)"
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:9090/-/reload\" -Method POST)",
+      "PowerShell(docker node update *)"
     ]
   }
 }

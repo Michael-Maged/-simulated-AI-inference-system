@@ -1,0 +1,4 @@
+Method,Name,Error,Occurrences
+POST,/infer [heavy],"ReadTimeout(ReadTimeoutError(""HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=120)""))",43
+POST,/infer [unique],"ReadTimeout(ReadTimeoutError(""HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=120)""))",63
+POST,/infer [normal],"ReadTimeout(ReadTimeoutError(""HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=120)""))",101
