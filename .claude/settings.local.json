@@ -38,7 +38,21 @@
       "PowerShell(docker node update *)",
       "Bash(pytest tests/client/test_timeout.py -v)",
       "Bash(del \"C:\\\\Users\\\\Michael Maged\\\\Desktop\\\\ASU\\\\term 8\\\\Dist\\\\project\\\\-simulated-AI-inference-system\\\\load_balancer\\\\cache.py\")",
-      "Bash(del \"C:\\\\Users\\\\Michael Maged\\\\Desktop\\\\ASU\\\\term 8\\\\Dist\\\\project\\\\-simulated-AI-inference-system\\\\tests\\\\load_balancer\\\\test_cache.py\")"
+      "Bash(del \"C:\\\\Users\\\\Michael Maged\\\\Desktop\\\\ASU\\\\term 8\\\\Dist\\\\project\\\\-simulated-AI-inference-system\\\\tests\\\\load_balancer\\\\test_cache.py\")",
+      "Bash(docker stack *)",
+      "Bash(Get-Content *)",
+      "Bash(python client/plot_results.py --csv client/results/rr_2_laptops/my_test)",
+      "Bash(python client/plot_results.py --csv client/results/rr_4_laptops/my_test)",
+      "Bash(python client/plot_results.py --csv client/results/lc_4_laptops/my_test)",
+      "Bash(python client/plot_results.py --csv client/results/la_4_laptops/my_test)",
+      "Bash(python -c \"import pandas as pd; df = pd.read_csv\\('client/results/rr_2_laptops/my_test_stats.csv'\\); print\\(list\\(df.columns\\)\\)\")",
+      "Bash(python -c \"import pandas as pd; df = pd.read_csv\\('client/results/rr_2_laptops/my_test_stats_history.csv'\\); print\\(list\\(df.columns\\)\\)\")",
+      "Bash(python client/plot_results.py --csv client/results/rr_2_laptops/my_test --out client/results/rr_2_laptops)",
+      "Bash(python client/plot_results.py --csv client/results/rr_4_laptops/my_test --out client/results/rr_4_laptops)",
+      "Bash(python client/plot_results.py --csv client/results/lc_4_laptops/my_test --out client/results/lc_4_laptops)",
+      "Bash(python client/plot_results.py --csv client/results/la_4_laptops/my_test --out client/results/la_4_laptops)",
+      "Bash(python client/plot_results.py --compare-strategies --rr client/results/rr_4_laptops/my_test --lc client/results/lc_4_laptops/my_test --la client/results/la_4_laptops/my_test)",
+      "Bash(python client/plot_results.py --scaling client/results/rr_2_laptops/my_test client/results/rr_4_laptops/my_test)"
     ]
   }
 }

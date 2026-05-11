@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
@@ -35,7 +36,7 @@ async def dispatch_to_worker(
                     max_tokens=max_tokens,
                     priority="normal",
                 ),
-                timeout=120.0,
+                timeout=60.0,
             )
     try:
         response = await loop.run_in_executor(None, _call)
@@ -77,7 +78,7 @@ async def process_request(
                 candidates.append((depth, w))
 
         if candidates:
-            candidates.sort(key=lambda x: x[0])
+            candidates.sort(key=lambda x: (x[0], x[1].last_latency_ms))
             break
 
         # All workers busy — wait and retry

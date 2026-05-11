@@ -54,8 +54,8 @@ def load_stats(csv_prefix: str) -> dict:
         "p50":         float(row["50%"]),
         "p95":         float(row["95%"]),
         "p99":         float(row["99%"]),
-        "avg":         float(row["Average (ms)"]),
-        "max":         float(row["Max (ms)"]),
+        "avg":         float(row["Average Response Time"]),
+        "max":         float(row["Max Response Time"]),
         "total":       int(row["Request Count"]),
         "failures":    int(row["Failure Count"]),
     }
@@ -89,7 +89,7 @@ def plot_overview(csv_prefix: str, out_dir: str):
     axes[0, 1].legend()
     axes[0, 1].grid(True, alpha=0.3)
 
-    axes[1, 0].plot(df["Timestamp"], df["User count"], color="purple")
+    axes[1, 0].plot(df["Timestamp"], df["User Count"], color="purple")
     axes[1, 0].set_title("Concurrent Users")
     axes[1, 0].set_xlabel("Time (s)")
     axes[1, 0].grid(True, alpha=0.3)
@@ -167,7 +167,7 @@ def plot_scaling_curve(prefixes: list, out_dir: str):
     for prefix in prefixes:
         df = load_history(prefix)
         s  = load_stats(prefix)
-        max_users = int(df["User count"].max())
+        max_users = int(df["User Count"].max())
         rows.append({
             "users": max_users,
             "rps":   s["rps"],

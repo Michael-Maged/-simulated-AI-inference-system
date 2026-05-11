@@ -24,22 +24,6 @@ Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
 
 ---
 
-## Cache
-
-```powershell
-# Check status
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache/status"
-
-# Clear all cached responses
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
-
-# Enable / Disable
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache/toggle?enabled=true" -Method PUT
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache/toggle?enabled=false" -Method PUT
-```
-
----
-
 ## Load Balancing Strategy
 
 ```powershell
@@ -75,8 +59,13 @@ python client/chaos.py --status
 # Kill a worker (scales down by 1)
 python client/chaos.py --kill worker-2
 
-# Add network delay to a worker
-python client/chaos.py --slow worker-3 500
+# Add network delay to a worker (find container name first)
+docker ps --format "{{.Names}}" | Select-String "worker"
+# then replace <container_name> with actual name e.g. inference_worker.1.xxxxx
+docker exec <container_name> sh -c "tc qdisc add dev eth0 root netem delay 500ms"
+
+# Remove the delay
+docker exec <container_name> sh -c "tc qdisc del dev eth0 root"
 
 # Recover a killed worker (scales back up by 1)
 python client/chaos.py --recover worker-2
@@ -105,17 +94,14 @@ locust -f client/locustfile.py --host http://localhost:8000 --users 1500 --spawn
 
 ```powershell
 Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
 Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=round_robin" -Method PUT
 locust -f client/locustfile.py --host http://localhost:8000 --users 200 --spawn-rate 10 --run-time 3m --headless --csv client/results/round_robin
 
 Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
 Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=least_connections" -Method PUT
 locust -f client/locustfile.py --host http://localhost:8000 --users 200 --spawn-rate 10 --run-time 3m --headless --csv client/results/least_connections
 
 Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
 Invoke-RestMethod -Uri "http://localhost:8000/admin/strategy?strategy=load_aware" -Method PUT
 locust -f client/locustfile.py --host http://localhost:8000 --users 200 --spawn-rate 10 --run-time 3m --headless --csv client/results/load_aware
 ```

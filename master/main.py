@@ -106,6 +106,15 @@ async def dispatch(body: DispatchRequest):
         raise HTTPException(status_code=503, detail=str(e))
 
 
+@app.post("/admin/flush")
+async def flush():
+    keys = await _redis.keys("connections:*")
+    if keys:
+        await _redis.delete(*keys)
+    await _redis.delete("queue:failed")
+    return {"flushed": len(keys)}
+
+
 @app.get("/workers", response_model=list[WorkerStatus])
 async def list_workers():
     out = []

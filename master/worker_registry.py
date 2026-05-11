@@ -11,7 +11,7 @@ class WorkerInfo:
     alive: bool = False
     last_heartbeat: float = 0.0
     queue_depth: int = 0
-    last_latency_ms: float = 0.0
+    last_latency_ms: float = 9999.0
 
 
 class WorkerRegistry:
