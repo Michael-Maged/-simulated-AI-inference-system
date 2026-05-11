@@ -2,7 +2,7 @@
   "title": "AI Inference System",
   "uid": "inference-main",
   "schemaVersion": 38,
-  "version": 2,
+  "version": 3,
   "refresh": "5s",
   "panels": [
     {
@@ -85,15 +85,6 @@
           "expr": "histogram_quantile(0.95, sum(rate(worker_infer_latency_seconds_bucket{job=\"workers-node4\"}[5m])) by (worker_id, le))",
           "legendFormat": "{{worker_id}}"
         }
-      ]
-    },
-    {
-      "id": 7,
-      "title": "Failed Requests",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
-      "targets": [
-        {"expr": "rate(master_requests_failed_total[1m])", "legendFormat": "failures/sec"}
       ]
     }
   ]
