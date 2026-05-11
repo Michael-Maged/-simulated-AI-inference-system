@@ -2,7 +2,6 @@ import random
 import uuid
 from locust import HttpUser, task, between
 
-# Large prompt pool so cache saturates slowly
 PROMPTS = [
     "What is a circuit breaker in distributed systems?",
     "Explain load balancing algorithms.",

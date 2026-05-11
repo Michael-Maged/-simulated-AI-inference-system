@@ -186,8 +186,6 @@ services:
       LB_STRATEGY: load_aware
       MASTER_URL: http://master:8001
       REDIS_URL: redis://redis:6379
-      CACHE_SIMILARITY_THRESHOLD: "0.88"
-      CACHE_TTL_SECONDS: "3600"
       EMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2
     deploy:
       replicas: 1

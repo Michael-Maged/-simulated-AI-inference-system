@@ -12,7 +12,6 @@ import sys
 sys.path.insert(0, "/app")
 from common.models import InferRequest, InferResponse
 from strategies import RoundRobinStrategy, LeastConnectionsStrategy, LoadAwareStrategy
-from cache import SemanticCache
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -20,14 +19,8 @@ log = logging.getLogger(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 MASTER_URL = os.getenv("MASTER_URL", "http://localhost:8001")
 LB_STRATEGY = os.getenv("LB_STRATEGY", "round_robin")
-CACHE_ENABLED = os.getenv("CACHE_ENABLED", "false").lower() == "true"
-CACHE_THRESHOLD = float(os.getenv("CACHE_SIMILARITY_THRESHOLD", "0.88"))
-CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
-EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
-REQUESTS_TOTAL = Counter("lb_requests_total", "Total requests", ["strategy", "cached"])
-CACHE_HITS = Counter("lb_cache_hits_total", "Cache hits")
-CACHE_MISSES = Counter("lb_cache_misses_total", "Cache misses")
+REQUESTS_TOTAL = Counter("lb_requests_total", "Total requests", ["strategy"])
 LATENCY = Histogram("lb_response_latency_seconds", "End-to-end latency",
                     buckets=[0.01, 0.1, 0.5, 1, 2, 5, 10, 30])
 
@@ -36,18 +29,13 @@ metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
 _redis: aioredis.Redis | None = None
-_cache: SemanticCache | None = None
 _strategy = None
 
 
 @app.on_event("startup")
 async def startup():
-    global _redis, _cache, _strategy
+    global _redis, _strategy
     _redis = aioredis.from_url(REDIS_URL)
-    if CACHE_ENABLED:
-        _cache = SemanticCache(REDIS_URL, CACHE_THRESHOLD, CACHE_TTL, EMBED_MODEL)
-    else:
-        _cache = None
     if LB_STRATEGY == "round_robin":
         _strategy = RoundRobinStrategy()
     elif LB_STRATEGY == "least_connections":
@@ -67,21 +55,6 @@ async def infer(body: InferRequest):
     start = time.time()
     request_id = str(uuid.uuid4())
 
-    if CACHE_ENABLED:
-        cached_response = await _cache.get(body.prompt)
-        if cached_response:
-            CACHE_HITS.inc()
-            REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="true").inc()
-            LATENCY.observe(time.time() - start)
-            return InferResponse(
-                request_id=request_id,
-                response=cached_response,
-                latency_ms=(time.time() - start) * 1000,
-                cached=True,
-            )
-
-    CACHE_MISSES.inc()
-
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
             resp = await client.post(
@@ -100,28 +73,14 @@ async def infer(body: InferRequest):
     data = resp.json()
     latency = (time.time() - start) * 1000
     LATENCY.observe(latency / 1000)
-    REQUESTS_TOTAL.labels(strategy=LB_STRATEGY, cached="false").inc()
-
-    if CACHE_ENABLED:
-        await _cache.set(body.prompt, data["response"])
+    REQUESTS_TOTAL.labels(strategy=LB_STRATEGY).inc()
 
     return InferResponse(
         request_id=request_id,
         response=data["response"],
         latency_ms=latency,
-        cached=False,
         worker_id=data.get("worker_id", ""),
     )
-
-
-@app.delete("/admin/cache")
-async def clear_cache():
-    if _redis is None:
-        raise HTTPException(status_code=503, detail="Redis is not initialized")
-    keys = await _redis.keys("cache:embed:*")
-    if keys:
-        await _redis.delete(*keys)
-    return {"deleted": len(keys)}
 
 
 @app.get("/admin/strategy")

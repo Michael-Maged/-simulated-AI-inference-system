@@ -36,7 +36,9 @@
       "PowerShell(docker service update *)",
       "PowerShell(Invoke-RestMethod -Uri \"http://localhost:9090/-/reload\" -Method POST)",
       "PowerShell(docker node update *)",
-      "Bash(pytest tests/client/test_timeout.py -v)"
+      "Bash(pytest tests/client/test_timeout.py -v)",
+      "Bash(del \"C:\\\\Users\\\\Michael Maged\\\\Desktop\\\\ASU\\\\term 8\\\\Dist\\\\project\\\\-simulated-AI-inference-system\\\\load_balancer\\\\cache.py\")",
+      "Bash(del \"C:\\\\Users\\\\Michael Maged\\\\Desktop\\\\ASU\\\\term 8\\\\Dist\\\\project\\\\-simulated-AI-inference-system\\\\tests\\\\load_balancer\\\\test_cache.py\")"
     ]
   }
 }

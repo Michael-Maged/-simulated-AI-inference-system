@@ -11,7 +11,6 @@ class InferResponse(BaseModel):
     request_id: str
     response: str
     latency_ms: float
-    cached: bool = False
     worker_id: str = ""
 
 

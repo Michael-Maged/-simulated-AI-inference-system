@@ -47,7 +47,7 @@ class WorkerRegistry:
             if raw is None or (now - float(raw)) > self.timeout:
                 w.alive = False
                 # evict workers silent for >3x timeout (they're gone for good)
-                if raw is None or (now - float(raw)) > self.timeout * 3:
+                if raw is None or (now - float(raw)) > self.timeout * 10:
                     evict.append(w.worker_id)
             else:
                 w.alive = True
