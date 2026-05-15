@@ -55,7 +55,7 @@ async def infer(body: InferRequest):
     start = time.time()
     request_id = str(uuid.uuid4())
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=75.0) as client:
         try:
             resp = await client.post(
                 f"{MASTER_URL}/dispatch",

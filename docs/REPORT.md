@@ -153,7 +153,7 @@ State is persisted in Redis so it survives master restarts. While OPEN, all disp
 | Failure mode | Detection | Response |
 |---|---|---|
 | Worker process crashes | 15 s heartbeat timeout | Worker marked dead, stops receiving traffic |
-| Worker hangs on inference | gRPC 60 s timeout (`DEADLINE_EXCEEDED`) | Counted as failure, retry on different worker |
+| Worker hangs on inference | gRPC 55 s timeout (`DEADLINE_EXCEEDED`) | Counted as failure, retry on different worker |
 | Worker becomes intermittently slow | Circuit breaker after 5 failures | Worker shed for 30 s, then re-tested |
 | RAG service down | HTTP timeout in worker | Worker continues without context (degraded) |
 | Master crashes | Workers' next heartbeat fails | Workers continue; LB retries on restart |
@@ -205,11 +205,25 @@ The PDF requires three LB strategies, basic GPU task distribution, RAG, and faul
 2. **Circuit breakers** per worker (citation: Fowler 2014, Netflix Hystrix)
 3. **Chaos testing tooling** (`client/chaos.py`) — kill, slow, recover commands (citation: Netflix Chaos Monkey)
 
-### 5.5 Building and Running
+### 5.5 Timeout Budget
+
+A consistent timeout chain ensures that inner timeouts always fire before outer ones, so retries and error propagation behave predictably:
+
+```
+Client (Locust)   90 s   ← ceiling; what the user experiences
+LB → Master       75 s   ← fires before client gives up
+gRPC per attempt  55 s   ← fires before LB gives up; allows ~1 retry within LB window
+Ollama inference  50 s   ← fires before gRPC deadline
+RAG retrieval      8 s   ← fast path; degrades gracefully if RAG is down
+```
+
+If Ollama takes longer than 50 s the worker raises an exception, the gRPC call returns an error at 55 s, the master retries on a different worker, and the LB still has 20 s of budget remaining before it would give up. The client sees the total round-trip, not individual hop timeouts.
+
+### 5.6 Building and Running
 
 See `SETUP.md` in the repo root for end-to-end instructions on a fresh machine.
 
-### 5.6 Migration Decisions
+### 5.7 Migration Decisions
 
 The codebase originally embedded Ollama inside each worker container, downloading the model per replica. This caused a `zstd not found` build failure in the Ollama base image and a 2 GB model download per worker on first start. The solution was to extract Ollama into its own dedicated service (`ollama` container, `mode: global` in Swarm) with a shared `ollama-models` volume, while workers call it over HTTP at `ollama:11434`. The current model is `qwen2.5:0.5b` — small enough to fit in 4 GB VRAM while still producing coherent responses. The migration touched only `workers/inference.py` and `docker-stack.yml`; the gRPC contract and all upstream services were unchanged.
 
