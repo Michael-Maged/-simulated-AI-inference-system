@@ -74,10 +74,7 @@ Invoke-RestMethod -Uri "http://localhost:9090/-/reload" -Method POST
 # 1. Flush in-flight queue counters
 Invoke-RestMethod -Uri "http://localhost:8001/admin/flush" -Method POST
 
-# 2. Clear semantic cache
-Invoke-RestMethod -Uri "http://localhost:8000/admin/cache" -Method DELETE
-
-# 3. Verify all workers alive and queue is 0
+# 2. Verify all workers alive and queue is 0
 Invoke-RestMethod -Uri "http://localhost:8001/workers" | ConvertTo-Json -Depth 2
 ```
 

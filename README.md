@@ -35,13 +35,6 @@ Invoke-WebRequest -Uri http://localhost:8000/infer `
   -Body '{"prompt": "What is a circuit breaker?", "max_tokens": 100}' `
   | Select-Object -ExpandProperty Content
 
-# Send it again — second time should say "cached": true and be much faster
-Invoke-WebRequest -Uri http://localhost:8000/infer `
-  -Method POST `
-  -ContentType "application/json" `
-  -Body '{"prompt": "What is a circuit breaker?", "max_tokens": 100}' `
-  | Select-Object -ExpandProperty Content
-
 # Check all worker statuses
 Invoke-WebRequest -Uri http://localhost:8001/workers | Select-Object -ExpandProperty Content
 ```
@@ -119,13 +112,10 @@ Spread the work across many services that cooperate — a **distributed system**
 
 ## The 3 Special Features (Extras for High Grade)
 
-### 1. Semantic Cache (inside Load Balancer)
-If user A asks "What is a circuit breaker?" and user B asks "Explain circuit breakers please", these are the same question worded differently. The cache detects this using AI math (cosine similarity of text embeddings) and returns the stored answer instantly (~10ms) instead of running the AI again (2-8 seconds).
-
-### 2. Adaptive Load-Aware Routing (inside Load Balancer)
+### 1. Adaptive Load-Aware Routing (inside Load Balancer)
 Instead of just counting requests per worker, we track how fast each worker actually responds (rolling p95 latency). We always route to the fastest worker. If worker-3 is slow today, it automatically gets fewer requests.
 
-### 3. Circuit Breakers (inside Master)
+### 2. Circuit Breakers (inside Master)
 If a worker keeps failing, we "trip" its circuit (like a fuse). All requests to it fail instantly instead of waiting. After 30 seconds we test it. If it recovered → normal again. If not → stay tripped.
 
 ```
@@ -149,11 +139,7 @@ User asks: "What is a circuit breaker?"
          │
          ▼
 Load Balancer :8000
-  ├─ Converts question to 384 numbers (embedding)
-  ├─ Checks Redis cache — similar question answered before?
-  │   YES → return cached answer instantly (~10ms)
-  │   NO  → continue...
-  ├─ Picks fastest worker using Load-Aware strategy
+  ├─ Picks worker using selected strategy (RR / LC / Load-Aware)
   └─ Forwards to Master
          │
          ▼
@@ -172,15 +158,11 @@ Worker-2 :9002
   │
   ├─ Builds augmented prompt:
   │     [CONTEXT] retrieved text [QUESTION] user question
-  ├─ Sends to Ollama (local AI model phi3:mini)
+  ├─ Sends to Ollama (local AI model qwen2.5:0.5b)
   └─ Returns AI answer
          │
          ▼
-Master → Load Balancer
-  └─ Stores answer in Redis cache for next time
-         │
-         ▼
-User gets answer in ~3-8 seconds (or ~10ms if cached)
+Master → Load Balancer → User gets answer in ~3-8 seconds
 ```
 
 ---
@@ -204,11 +186,8 @@ Three routing algorithms:
 
 Change with env var `LB_STRATEGY=round_robin|least_connections|load_aware`
 
-### `load_balancer/cache.py`
-The semantic cache. Converts questions to number vectors, finds similar cached questions, returns stored answers instantly.
-
 ### `load_balancer/main.py`
-The full load balancer FastAPI app. Receives requests, checks cache, routes to master.
+The full load balancer FastAPI app. Receives requests, applies routing strategy, forwards to master.
 
 ### `master/worker_registry.py`
 Tracks which workers are alive. Workers send heartbeats every 5 seconds. No heartbeat for 15 seconds → worker marked DEAD.
@@ -224,9 +203,9 @@ Full master coordinator. Handles `/dispatch`, `/heartbeat`, `/workers` endpoints
 
 ### `workers/entrypoint.sh`
 Startup script inside each worker container:
-1. Start Ollama
-2. Wait until Ollama is ready
-3. Download phi3:mini (first time only, ~2GB)
+1. Ollama runs as a dedicated service (shared by all workers)
+2. Workers connect to Ollama at ollama:11434
+3. Model qwen2.5:0.5b is pre-loaded (downloaded once into the ollama-models volume)
 4. Start gRPC server
 
 ### `workers/inference.py`
@@ -257,7 +236,7 @@ Tells Prometheus to scrape metrics from all services every 15 seconds.
 Alert rules: no workers for 30s = critical, queue > 500 for 60s = warning, p95 latency > 10s = warning.
 
 ### `monitoring/grafana/provisioning/`
-Auto-configures Grafana on startup. No manual setup needed. Dashboard has 7 panels: throughput, latency percentiles, worker health, cache hit rate, queue depth, worker latency, failures.
+Auto-configures Grafana on startup. No manual setup needed. Dashboard panels: throughput, latency percentiles, worker health, queue depth, worker latency, failures.
 
 ### `client/locustfile.py`
 Load test. Simulates NormalUsers (short questions, 0.1-1s pause) and HeavyUsers (long questions, no pause). Run with 100/500/1000/1500 users to measure performance.
@@ -269,7 +248,7 @@ Chaos testing. Kill/slow/recover workers during a live load test to prove fault 
 Generates matplotlib graphs from Locust CSV data for the report: throughput curve, latency percentiles, strategy comparison bar chart, scaling curve.
 
 ### `tests/`
-27 unit tests. Run without Docker. Test routing strategies, semantic cache, circuit breaker state machine, worker registry, and text chunker.
+Unit tests. Run without Docker. Test routing strategies, circuit breaker state machine, worker registry, and text chunker.
 
 ---
 
@@ -286,7 +265,7 @@ Generates matplotlib graphs from Locust CSV data for the report: throughput curv
 | worker-2 | 9002 | AI worker (gRPC) |
 | worker-3 | 9003 | AI worker (gRPC) |
 | worker-4 | 9004 | AI worker (gRPC) |
-| redis | 6379 | Queue, cache, heartbeat state |
+| redis | 6379 | Queue, heartbeat state |
 | prometheus | 9090 | Metrics collector |
 | **grafana** | **3000** | **Live dashboard** |
 
@@ -299,10 +278,10 @@ Generates matplotlib graphs from Locust CSV data for the report: throughput curv
 | Python 3.11 | Required by spec |
 | FastAPI | Async web framework, fast, auto-docs |
 | gRPC | 5-10x faster than HTTP for internal calls |
-| Ollama + phi3:mini | Local AI model, no internet needed, free |
+| Ollama + qwen2.5:0.5b | Local GPU inference, no API cost, runs on GTX 1650 |
 | ChromaDB | Vector database for AI similarity search |
 | sentence-transformers | Converts text to number vectors |
-| Redis | In-memory store: queues, cache, counters |
+| Redis | In-memory store: queues, counters, heartbeat state |
 | Prometheus | Collects metrics from all services |
 | Grafana | Displays metrics as live graphs |
 | Locust | Simulates 1000+ concurrent users |
@@ -316,7 +295,7 @@ Generates matplotlib graphs from Locust CSV data for the report: throughput curv
 Already fixed in Dockerfile. Just run `docker compose up --build` again.
 
 **Workers take too long to start**
-Normal on first run. phi3:mini is ~2GB and downloads once. Subsequent starts are fast (model is cached in a Docker volume).
+Normal on first run. qwen2.5:0.5b downloads once into the `ollama-models` Docker volume. Subsequent starts are fast — the model is already cached.
 
 **`curl` doesn't work in PowerShell**
 Use `Invoke-WebRequest` instead (see Testing section above). Or type `curl.exe` with `.exe` to use real curl if installed.
